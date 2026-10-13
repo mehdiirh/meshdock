@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
+from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
-
-from alembic import command
 
 from . import settings
 

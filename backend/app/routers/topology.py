@@ -29,7 +29,8 @@ def positions(body: models.Positions, actor=Depends(require("write"))):
     with connect(True) as db:
         for id, p in body.positions.items():
             db.execute(
-                "UPDATE servers SET position=? WHERE id=? AND deleted=0", (p.model_dump_json(), id)
+                "UPDATE servers SET position=? WHERE id=? AND deleted=0",
+                (p.model_dump_json(), id),
             )
     return {"ok": True}
 
@@ -38,7 +39,7 @@ def positions(body: models.Positions, actor=Depends(require("write"))):
 def methods(actor=Depends(require("read"))):
     from ..methods import REGISTRY
 
-    return [m.metadata for m in REGISTRY.values()]
+    return [{**m.metadata, "control_protocol": m.control_protocol} for m in REGISTRY.values()]
 
 
 @router.get("/preview")
@@ -54,6 +55,7 @@ def preview(actor=Depends(require("read"))):
             "units": list(p["units"]),
             "files": list(p["files"]),
             "ports": p["listeners"],
+            "udp_ports": p["udp_listeners"],
             "method_count": p["method_count"],
         }
         for id, p in plans.items()
@@ -75,12 +77,14 @@ def cleanup(body: models.Revision, actor=Depends(require("admin"))):
     with connect(True) as db:
         current = topology.desired(db)
         # Disable edges: removes all managed tunnel resources while retaining the inventory.
-        for l in current["links"]:
-            l["enabled"] = False
+        for link in current["links"]:
+            link["enabled"] = False
         return topology.save(
             db,
             models.Topology(
-                revision=body.revision, servers=current["servers"], links=current["links"]
+                revision=body.revision,
+                servers=current["servers"],
+                links=current["links"],
             ),
             actor,
         )

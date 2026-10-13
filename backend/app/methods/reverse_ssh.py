@@ -19,11 +19,7 @@ class ReverseSSH(Adapter):
             for index in range(len(context.link["ports"]))
         )
         entry["files"][name + "-authorized"] = (
-            "restrict,port-forwarding,"
-            + options
-            + " "
-            + context.secrets["client_public"]
-            + "\n"
+            "restrict,port-forwarding," + options + " " + context.secrets["client_public"] + "\n"
         )
         entry["files"][name + "-sshd.conf"] = f"""Port {context.control}
 ListenAddress 0.0.0.0
@@ -71,6 +67,4 @@ LogLevel ERROR
         entry["listeners"].append(context.control)
         for index, port in enumerate(context.link["ports"]):
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append(
-                (port, "127.0.0.1", context.internal(index), context.link)
-            )
+            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))

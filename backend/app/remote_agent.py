@@ -27,9 +27,7 @@ class OperationError(Exception):
 
 
 def run(arguments, *, input=None, check=True, timeout=180):
-    result = subprocess.run(
-        arguments, input=input, capture_output=True, timeout=timeout
-    )
+    result = subprocess.run(arguments, input=input, capture_output=True, timeout=timeout)
     if check and result.returncode:
         # Command output may contain configuration secrets. Only stable codes leave the host.
         raise OperationError("remote_failed")
@@ -103,14 +101,11 @@ class Agent:
             ):
                 raise OperationError("preflight_failed")
         for name in plan["units"]:
-            if not name.startswith(self.prefix) or not re.fullmatch(
-                "[a-z0-9-]+\.service", name
-            ):
+            if not name.startswith(self.prefix) or not re.fullmatch(r"[a-z0-9-]+\.service", name):
                 raise OperationError("preflight_failed")
             path = self.units / name
             if path.exists() and not (
-                path.is_symlink()
-                and str(path.readlink()).startswith(str(self.root) + "/current/")
+                path.is_symlink() and str(path.readlink()).startswith(str(self.root) + "/current/")
             ):
                 raise OperationError("ownership_conflict")
         old_interfaces = {item["name"] for item in previous["interfaces"]}
@@ -122,32 +117,38 @@ class Agent:
                 raise OperationError("ownership_conflict")
         if shutil.which("ss"):
             listening = run(["ss", "-H", "-ltn"]).stdout.decode()
-            ports = {
-                int(line.split()[3].rsplit(":", 1)[1])
-                for line in listening.splitlines()
-            }
+            ports = {int(line.split()[3].rsplit(":", 1)[1]) for line in listening.splitlines()}
             if (set(plan["listeners"]) - set(previous["listeners"])) & ports:
                 raise OperationError("ownership_conflict")
         if shutil.which("ss"):
             listening = run(["ss", "-H", "-lun"]).stdout.decode()
-            ports = {
-                int(line.split()[3].rsplit(":", 1)[1])
-                for line in listening.splitlines()
-            }
+            ports = {int(line.split()[3].rsplit(":", 1)[1]) for line in listening.splitlines()}
             if (
-                set(plan.get("udp_listeners", []))
-                - set(previous.get("udp_listeners", []))
+                set(plan.get("udp_listeners", [])) - set(previous.get("udp_listeners", []))
             ) & ports:
                 raise OperationError("ownership_conflict")
         if shutil.which("ip"):
             routes = json.loads(run(["ip", "-json", "route", "show"]).stdout)
             for interface in plan["interfaces"]:
                 if any(
-                    r.get("dst") == interface["network"]
-                    and r.get("dev") != interface["name"]
+                    r.get("dst") == interface["network"] and r.get("dev") != interface["name"]
                     for r in routes
                 ):
                     raise OperationError("ownership_conflict")
+
+    @property
+    def package_policy_text(self):
+        return f"#!/bin/sh\n# Tunnel Manager {self.namespace} temporary policy\nexit 101\n"
+
+    def recover_package_policy(self, policy=None, lock_path=None):
+        """Remove this helper's exact orphaned policy after an interrupted install."""
+        policy = Path(policy or "/usr/sbin/policy-rc.d")
+        lock_path = Path(lock_path or "/run/tunnel-manager-packages.lock")
+        with lock_path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if policy.is_file() and not policy.is_symlink():
+                if policy.read_text() == self.package_policy_text:
+                    policy.unlink()
 
     def dependencies(self, plan, artifacts):
         if not plan["units"]:
@@ -177,7 +178,7 @@ class Agent:
                 if created:
                     fd = os.open(policy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o755)
                     with os.fdopen(fd, "w") as stream:
-                        stream.write("#!/bin/sh\nexit 101\n")
+                        stream.write(self.package_policy_text)
                 try:
                     run(["apt-get", "update", "-qq"], timeout=240)
                     run(
@@ -208,18 +209,11 @@ class Agent:
             url, expected = artifact
             destination = self.root / "bin" / name
             marker = destination.with_suffix(".sha256")
-            if (
-                destination.exists()
-                and marker.exists()
-                and marker.read_text() == expected
-            ):
+            if destination.exists() and marker.exists() and marker.read_text() == expected:
                 continue
             with urllib.request.urlopen(url, timeout=60) as response:
                 archive = response.read(100_000_001)
-            if (
-                len(archive) > 100_000_000
-                or hashlib.sha256(archive).hexdigest() != expected
-            ):
+            if len(archive) > 100_000_000 or hashlib.sha256(archive).hexdigest() != expected:
                 raise OperationError("install_failed")
             if url.endswith(".zip"):
                 with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
@@ -227,9 +221,7 @@ class Agent:
             elif url.endswith(".tar.gz"):
                 with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
                     member = next(
-                        m
-                        for m in bundle.getmembers()
-                        if Path(m.name).name == name and m.isfile()
+                        m for m in bundle.getmembers() if Path(m.name).name == name and m.isfile()
                     )
                     if member.size > 100_000_000:
                         raise OperationError("install_failed")
@@ -255,14 +247,21 @@ class Agent:
             path.write_text(content)
             path.chmod(0o600)
         if "haproxy.cfg" in plan["files"]:
-            run(["haproxy", "-c", "-f", str(directory / "haproxy.cfg")])
+            # Check staged certificate paths before activating the current pointer.
+            temporary = directory / "haproxy.check"
+            temporary.write_text(
+                plan["files"]["haproxy.cfg"].replace(str(self.root / "current"), str(directory))
+            )
+            temporary.chmod(0o600)
+            try:
+                run(["haproxy", "-c", "-f", str(temporary)])
+            finally:
+                temporary.unlink()
         for name in plan["files"]:
             if name.endswith("-sshd.conf"):
                 temporary = directory / (name + ".check")
                 temporary.write_text(
-                    plan["files"][name].replace(
-                        str(self.root / "current"), str(directory)
-                    )
+                    plan["files"][name].replace(str(self.root / "current"), str(directory))
                 )
                 temporary.chmod(0o600)
                 try:
@@ -277,15 +276,11 @@ class Agent:
         )
 
     def firewall(self, rules):
-        exists = (
-            run(["iptables", "-w", "-n", "-L", self.chain], check=False).returncode == 0
-        )
+        exists = run(["iptables", "-w", "-n", "-L", self.chain], check=False).returncode == 0
         if not rules:
             if exists:
                 while (
-                    run(
-                        ["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False
-                    ).returncode
+                    run(["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False).returncode
                     == 0
                 ):
                     run(["iptables", "-w", "-D", "INPUT", "-j", self.chain])
@@ -303,9 +298,7 @@ class Agent:
             lines.append(line + " -j ACCEPT")
         lines.extend(["COMMIT", ""])
         run(["iptables-restore", "-w", "--noflush"], input="\n".join(lines).encode())
-        if run(
-            ["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False
-        ).returncode:
+        if run(["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False).returncode:
             run(["iptables", "-w", "-I", "INPUT", "1", "-j", self.chain])
 
     def switch(self, target):
@@ -313,12 +306,10 @@ class Agent:
         desired = self.manifest(target)
         # A full generation is activated together locally. TCP sessions may reconnect.
         for unit in previous["units"]:
-            run(["systemctl", "stop", unit], check=False)
+            run(["systemctl", "stop", unit])
             run(["systemctl", "disable", unit], check=False)
             path = self.units / unit
-            if path.is_symlink() and str(path.readlink()).startswith(
-                str(self.root) + "/current/"
-            ):
+            if path.is_symlink() and str(path.readlink()).startswith(str(self.root) + "/current/"):
                 path.unlink()
         pointer = self.root / "current"
         if target:
@@ -372,9 +363,7 @@ class Agent:
                 raise OperationError("health_failed") from None
         for endpoint in plan["checks"]:
             try:
-                with socket.create_connection(
-                    (endpoint["host"], endpoint["port"]), timeout=4
-                ):
+                with socket.create_connection((endpoint["host"], endpoint["port"]), timeout=4):
                     pass
             except OSError:
                 raise OperationError("health_failed") from None
@@ -388,12 +377,18 @@ class Agent:
         if journal["phase"] == "rolled_back":
             return
         if journal["phase"] != "prepared":
-            target = (
-                self.generation(journal["previous"]) if journal["previous"] else None
-            )
+            target = self.generation(journal["previous"]) if journal["previous"] else None
             self.switch(target)
         journal["phase"] = "rolled_back"
         atomic_json(journal_path, journal)
+
+    def uninstall(self):
+        if self.manifest(self.current())["units"]:
+            raise OperationError("cleanup_first")
+        self.switch(None)
+        for suffix in ("stats.sock", "haproxy.pid"):
+            Path(f"/run/tm-{self.namespace}-{suffix}").unlink(missing_ok=True)
+        shutil.rmtree(self.root)
 
     def commit(self, generation):
         directory = self.generation(generation)
@@ -408,12 +403,23 @@ class Agent:
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--uninstall":
+        agent = Agent(sys.argv[2])
+        if os.geteuid() != 0:
+            raise SystemExit("Root access is required.")
+        with (agent.root / "agent.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            agent.recover_package_policy()
+            agent.uninstall()
+        print("Installation resources removed; shared packages were preserved.")
+        return
     request = json.load(sys.stdin)
     agent = Agent(request["namespace"])
     lock = open(agent.root / "agent.lock", "a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX)
         agent.accept_fence(request["fence"])
+        agent.recover_package_policy()
         action = request["action"]
         generation = request["generation"]
         if action == "prepare":

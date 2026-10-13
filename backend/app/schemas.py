@@ -82,6 +82,7 @@ class Link(Model):
     exit_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     method: str = Field(pattern=r"^[a-z0-9_]{1,40}$")
     enabled: bool = True
+    control_port: int | None = Field(default=None, ge=1, le=65535)
     ports: list[Port] = Field(min_length=1, max_length=16)
     policy: Literal["roundrobin", "leastconn", "failover"] = "roundrobin"
     weight: int = Field(default=1, ge=1, le=256)

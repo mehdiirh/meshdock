@@ -62,9 +62,7 @@ class Worker:
     def __init__(self, remote_factory=None):
         self.owner = uid()
         self.fence = 0
-        self.remote_factory = remote_factory or (
-            DemoRemote if settings.DEMO else Remote
-        )
+        self.remote_factory = remote_factory or (DemoRemote if settings.DEMO else Remote)
         self.stopped = threading.Event()
         self.lease_lost = threading.Event()
 
@@ -86,23 +84,29 @@ class Worker:
     def acquire(self):
         with connect(True) as database:
             leader = database.execute("SELECT * FROM leader WHERE id=1").fetchone()
-            if (
-                leader
-                and leader["until"] > time.time()
-                and leader["owner"] != self.owner
-            ):
+            if leader and leader["until"] > time.time() and leader["owner"] != self.owner:
                 return False
             database.execute(
                 "INSERT INTO leader(id,owner,until,epoch) VALUES(1,?,?,1) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,until=excluded.until,epoch=leader.epoch+1",
                 (self.owner, time.time() + settings.LEASE_SECONDS),
             )
-            self.fence = database.execute(
-                "SELECT epoch FROM leader WHERE id=1"
-            ).fetchone()[0]
+            self.fence = database.execute("SELECT epoch FROM leader WHERE id=1").fetchone()[0]
         return True
+
+    def owns_lease(self, database):
+        leader = database.execute("SELECT * FROM leader WHERE id=1").fetchone()
+        return bool(
+            leader
+            and leader["owner"] == self.owner
+            and leader["epoch"] == self.fence
+            and leader["until"] > time.time()
+        )
 
     def claim(self):
         with connect(True) as database:
+            if not self.owns_lease(database):
+                self.lease_lost.set()
+                return None
             # An interrupted job is compensated before any newer generation can run.
             interrupted = database.execute(
                 "SELECT * FROM jobs WHERE status='running' AND owner!=? ORDER BY created LIMIT 1",
@@ -158,8 +162,10 @@ class Worker:
         return self.remote_factory(server, unseal(row["encrypted"]), namespace)
 
     def operate(self, server, namespace, action, payload, *, install=False):
-        if self.lease_lost.is_set():
-            raise RuntimeError("lease_lost")
+        with connect() as database:
+            if self.lease_lost.is_set() or not self.owns_lease(database):
+                self.lease_lost.set()
+                raise AppError("stale_worker")
         remote = self.remote(server, namespace)
         try:
             if install:
@@ -178,6 +184,7 @@ class Worker:
                     namespace,
                     "rollback",
                     {"generation": receipt["generation"]},
+                    install=True,
                 )
                 item["rolled_back"] = True
                 self.remember(job, receipt)
@@ -282,11 +289,7 @@ class Worker:
                 )
             with connect(True) as database:
                 leader = database.execute("SELECT * FROM leader WHERE id=1").fetchone()
-                if (
-                    not leader
-                    or leader["owner"] != self.owner
-                    or leader["until"] <= time.time()
-                ):
+                if not leader or leader["owner"] != self.owner or leader["until"] <= time.time():
                     self.lease_lost.set()
                     raise RuntimeError("lease_lost")
                 database.execute(
@@ -331,9 +334,7 @@ class Worker:
                 self.stopped.set()
                 heartbeat.join(timeout=12)
                 with connect(True) as database:
-                    database.execute(
-                        "UPDATE leader SET until=0 WHERE owner=?", (self.owner,)
-                    )
+                    database.execute("UPDATE leader SET until=0 WHERE owner=?", (self.owner,))
 
 
 def main():

@@ -1,9 +1,8 @@
 import pytest
-from fastapi.testclient import TestClient
-
 from app import settings
 from app.db import initialize
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -27,7 +26,8 @@ def client(environment):
 @pytest.fixture
 def admin(client):
     response = client.post(
-        "/api/v1/auth/login", json={"username": "admin", "password": "development-only-password"}
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "development-only-password"},
     )
     assert response.status_code == 200
     client.headers["x-csrf-token"] = response.json()["csrf"]

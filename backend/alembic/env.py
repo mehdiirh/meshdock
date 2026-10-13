@@ -1,8 +1,7 @@
-from sqlalchemy import create_engine, pool
-
 from alembic import context
 from app import settings
 from app.entities import Base
+from sqlalchemy import create_engine, pool
 
 config = context.config
 target_metadata = Base.metadata

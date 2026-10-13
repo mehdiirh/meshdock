@@ -14,10 +14,7 @@ def test_repeated_migration_preserves_existing_rows(environment):
     migrate()
     migrate()
     with connect() as db:
-        assert (
-            db.execute("SELECT username FROM users WHERE id='test'").fetchone()[0]
-            == "someone"
-        )
+        assert db.execute("SELECT username FROM users WHERE id='test'").fetchone()[0] == "someone"
         assert db.execute("SELECT COUNT(*) FROM alembic_version").fetchone()[0] == 1
     command.check(configuration())
 
@@ -31,9 +28,7 @@ def test_failed_ddl_transaction_preserves_database(environment):
             raise RuntimeError("injected migration failure")
     with sqlite3.connect(settings.DB) as db:
         assert (
-            db.execute(
-                "SELECT name FROM sqlite_master WHERE name='failed_upgrade'"
-            ).fetchone()
+            db.execute("SELECT name FROM sqlite_master WHERE name='failed_upgrade'").fetchone()
             is None
         )
     engine.dispose()
@@ -43,11 +38,26 @@ def test_upgrade_previous_revision_preserves_data(environment):
     config = configuration()
     command.downgrade(config, "ed9a37d2efc4")
     with connect(True) as database:
-        database.execute(
-            "INSERT INTO leader(id,owner,until) VALUES(1,'previous-worker',0)"
-        )
+        database.execute("INSERT INTO leader(id,owner,until) VALUES(1,'previous-worker',0)")
     migrate()
     with connect() as database:
         row = database.execute("SELECT owner,epoch FROM leader").fetchone()
         assert tuple(row) == ("previous-worker", 0)
     command.check(config)
+
+
+def test_control_port_upgrade_preserves_existing_links(admin):
+    assert admin.post("/api/v1/demo/seed").status_code == 200
+    with connect() as database:
+        before = database.execute(
+            "SELECT id,method,slot,encrypted FROM links ORDER BY id"
+        ).fetchall()
+    command.downgrade(configuration(), "334353843c4e")
+    migrate()
+    with connect() as database:
+        after = database.execute(
+            "SELECT id,method,slot,encrypted FROM links ORDER BY id"
+        ).fetchall()
+        assert [tuple(row) for row in before] == [tuple(row) for row in after]
+        assert all(row[0] is None for row in database.execute("SELECT control_port FROM links"))
+    command.check(configuration())

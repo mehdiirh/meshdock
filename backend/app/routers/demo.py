@@ -52,7 +52,7 @@ def seed(actor=Depends(require("admin"))):
                     fingerprint="SHA256:" + "A" * 43,
                     position={
                         "x": 80 if role == "entry" else 520,
-                        "y": 100 + index * 240 if role == "entry" else 20 + (index - 2) * 220,
+                        "y": (100 + index * 240 if role == "entry" else 20 + (index - 2) * 220),
                     },
                 )
             )

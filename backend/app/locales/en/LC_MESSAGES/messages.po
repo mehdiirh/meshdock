@@ -125,3 +125,12 @@ msgstr "Worker started deployment."
 
 msgid "worker_error"
 msgstr "Deployment failed; recovery details are recorded below."
+
+msgid "cleanup_first"
+msgstr "Clean up managed connections before removing the helper."
+
+msgid "stale_worker"
+msgstr "A newer worker owns this deployment."
+
+msgid "control_port_conflict"
+msgstr "The transport port conflicts with another listener on this server."

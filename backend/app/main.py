@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 from . import settings
 from .db import connect, initialize
 from .i18n import translate
+from .routers import auth, credentials, demo, jobs, keys
+from .routers import topology as topology_router
 from .security import AppError, bootstrap
 
 
@@ -22,7 +24,8 @@ app = FastAPI(
     title="Tunnel Manager API",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/api/docs",
+    docs_url=None,
+    redoc_url=None,
     openapi_url="/api/openapi.json",
 )
 P = "/api/v1"
@@ -79,12 +82,14 @@ def health():
     }
 
 
-from .routers import auth, credentials, jobs, keys
-from .routers import topology as topology_router
-
-for router in (auth.router, credentials.router, topology_router.router, jobs.router, keys.router):
+for router in (
+    auth.router,
+    credentials.router,
+    topology_router.router,
+    jobs.router,
+    keys.router,
+):
     app.include_router(router, prefix=P)
 
-from .routers import demo
 
 app.include_router(demo.router, prefix=P)

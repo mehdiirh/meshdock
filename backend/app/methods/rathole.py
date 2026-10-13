@@ -21,9 +21,7 @@ class Rathole(Adapter):
             token = json.dumps(context.secrets["token"])
             server += f'[server.services.{name}]\ntoken = {token}\nbind_addr = "127.0.0.1:{context.internal(index)}"\n'
             client += f'[client.services.{name}]\ntoken = {token}\nlocal_addr = "{port["host"]}:{port["target"]}"\n'
-            entry["backends"].append(
-                (port, "127.0.0.1", context.internal(index), context.link)
-            )
+            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
             entry["listeners"].append(context.internal(index))
         entry["files"][context.filename + ".toml"] = server
         exit["files"][context.filename + ".toml"] = client

@@ -46,6 +46,4 @@ class Backhaul(Adapter):
         entry["listeners"].append(context.control)
         for index, port in enumerate(context.link["ports"]):
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append(
-                (port, "127.0.0.1", context.internal(index), context.link)
-            )
+            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))

@@ -41,9 +41,7 @@ def test_method_registry_compiles_every_adapter(admin):
         assert response.status_code == 200, response.text
         with connect() as database:
             plans = build(topology.desired(database, True))
-        assert all(
-            "token" not in str(row) for row in admin.get("/api/v1/preview").json()
-        )
+        assert all("token" not in str(row) for row in admin.get("/api/v1/preview").json())
         assert any(p["units"] for p in plans.values())
         if method["id"] == "hysteria2":
             assert any(p["udp_listeners"] for p in plans.values())
@@ -52,9 +50,7 @@ def test_method_registry_compiles_every_adapter(admin):
 def test_cycles_conflicting_pools_and_credentials_in_use(admin):
     value = seeded(admin)
     assert (
-        admin.delete(
-            "/api/v1/credentials/" + value["servers"][0]["credential_id"]
-        ).status_code
+        admin.delete("/api/v1/credentials/" + value["servers"][0]["credential_id"]).status_code
         == 409
     )
     value["links"][1]["policy"] = "leastconn"
@@ -94,10 +90,7 @@ def test_success_and_cleanup(admin):
     worker.process(worker.claim())
     assert admin.get("/api/v1/jobs").json()[0]["status"] == "succeeded"
     assert admin.get("/api/v1/topology").json()["applied_revision"] == value["revision"]
-    assert (
-        admin.post("/api/v1/cleanup", json={"revision": value["revision"]}).status_code
-        == 202
-    )
+    assert admin.post("/api/v1/cleanup", json={"revision": value["revision"]}).status_code == 202
     with connect() as database:
         plans = build(topology.desired(database, True))
     assert all(not p["units"] and not p["firewall"] for p in plans.values())
@@ -148,3 +141,64 @@ def test_host_replacement_includes_old_endpoint_for_cleanup(admin):
     assert len(fleet) == len(value["servers"]) + 1
     old = next(t for t in fleet if t.identity == "192.0.2.10:22")
     assert not old.plan["units"]
+
+
+def test_custom_control_port_round_trip_and_collision_detection(admin):
+    value = seeded(admin)
+    link = value["links"][0]
+    link["method"] = "frp_wss"
+    link["control_port"] = 443
+    assert (
+        admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "control_port_conflict"
+    )
+    link["control_port"] = 8443
+    assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
+    assert admin.get("/api/v1/topology").json()["links"][0]["control_port"] == 8443
+    with connect() as database:
+        snapshot = topology.desired(database, True)
+        plans = build(snapshot)
+    entry = plans[link["entry_id"]]
+    assert "bind 0.0.0.0:8443 ssl crt" in entry["files"]["haproxy.cfg"]
+    assert any(
+        'bindAddr = "127.0.0.1"' in content
+        for name, content in entry["files"].items()
+        if name.endswith(".toml")
+    )
+    other = value["links"][1]
+    other["control_port"] = 8443
+    value["revision"] += 1
+    assert (
+        admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "control_port_conflict"
+    )
+
+
+def test_worker_takeover_fences_old_worker_and_recovers_interrupted_job(admin):
+    seeded(admin)
+    previous = Worker(RecordingRemote)
+    assert previous.acquire()
+    interrupted = previous.claim()
+    successor = Worker(RecordingRemote)
+    assert not successor.acquire()
+    with connect(True) as database:
+        database.execute("UPDATE leader SET until=0")
+    assert successor.acquire()
+    assert successor.fence > previous.fence
+    assert previous.claim() is None
+    job = successor.claim()
+    assert job["id"] == interrupted["id"]
+    assert job["status"] == "recovering"
+    successor.process(job)
+    assert admin.get("/api/v1/jobs").json()[0]["error_code"] == "recovered"
+    assert admin.get("/api/v1/topology").json()["applied_revision"] == 0
+
+
+def test_cycle_is_rejected(admin):
+    value = seeded(admin)
+    first, second = value["servers"][:2]
+    first["role"] = second["role"] = "both"
+    sample = value["links"][0]
+    value["links"] = [
+        {**sample, "id": "a" * 32, "entry_id": first["id"], "exit_id": second["id"]},
+        {**sample, "id": "b" * 32, "entry_id": second["id"], "exit_id": first["id"]},
+    ]
+    assert admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "topology_cycle"

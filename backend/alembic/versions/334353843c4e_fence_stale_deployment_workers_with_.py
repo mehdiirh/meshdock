@@ -14,9 +14,7 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        "leader", sa.Column("epoch", sa.Integer(), server_default="0", nullable=False)
-    )
+    op.add_column("leader", sa.Column("epoch", sa.Integer(), server_default="0", nullable=False))
 
 
 def downgrade():

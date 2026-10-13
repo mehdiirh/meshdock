@@ -4,6 +4,8 @@ from .base import Adapter, service
 
 
 class GRE(Adapter):
+    control_protocol = None
+
     metadata = {
         "id": "gre",
         "name": "GRE",
@@ -36,23 +38,21 @@ esac
             plan["files"][name] = script
             plan["units"][context.tag + "-gre.service"] = service(
                 f"/bin/sh {context.root}/{name} up",
-                extra=f"RemainAfterExit=yes\nExecStop=/bin/sh {context.root}/{name} down",
+                extra=f"RemainAfterExit=yes\nExecStopPost=/bin/sh {context.root}/{name} down",
                 kind="oneshot",
             )
-            plan["interfaces"].append(
-                {"name": iface, "network": str(IPv4Address(first)) + "/30"}
-            )
+            plan["interfaces"].append({"name": iface, "network": str(IPv4Address(first)) + "/30"})
             plan["firewall"].append({"protocol": "gre", "source": peer["address"]})
         for index, port in enumerate(context.link["ports"]):
-            port = context.internal(index)
+            internal_port = context.internal(index)
             exit["relay"].append(
                 {
                     "bind": ip_b,
-                    "port": port,
+                    "port": internal_port,
                     "host": port["host"],
                     "target": port["target"],
                     "name": f'g{context.link["slot"]}_{index}',
                 }
             )
-            exit["firewall"].append({"protocol": "tcp", "source": ip_a, "port": port})
-            entry["backends"].append((port, ip_b, port, context.link))
+            exit["firewall"].append({"protocol": "tcp", "source": ip_a, "port": internal_port})
+            entry["backends"].append((port, ip_b, internal_port, context.link))

@@ -45,7 +45,12 @@ def login(body: models.Login, request: Request, response: Response):
             db.execute("DELETE FROM sessions WHERE expires<?", (time.time(),))
             db.execute(
                 "INSERT INTO sessions VALUES(?,?,?,?)",
-                (digest(token), user["id"], csrf, time.time() + settings.SESSION_HOURS * 3600),
+                (
+                    digest(token),
+                    user["id"],
+                    csrf,
+                    time.time() + settings.SESSION_HOURS * 3600,
+                ),
             )
             audit(db, "user:" + user["id"], "login")
     if not ok:
@@ -71,7 +76,11 @@ def me(request: Request, actor=Depends(require("read"))):
                 "SELECT csrf FROM sessions WHERE token_hash=?",
                 (digest(request.cookies.get("tm_session", "")),),
             ).fetchone()
-            return {"username": row["username"], "csrf": session["csrf"], "demo": settings.DEMO}
+            return {
+                "username": row["username"],
+                "csrf": session["csrf"],
+                "demo": settings.DEMO,
+            }
     return {"username": "API", "csrf": "", "demo": settings.DEMO}
 
 
@@ -95,7 +104,8 @@ def password(body: models.Password, actor=Depends(require("admin"))):
         if not verify(user["password_hash"], body.current):
             raise AppError("invalid_login", 401)
         db.execute(
-            "UPDATE users SET password_hash=? WHERE id=?", (hasher.hash(body.password), user["id"])
+            "UPDATE users SET password_hash=? WHERE id=?",
+            (hasher.hash(body.password), user["id"]),
         )
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         audit(db, actor, "password_changed")

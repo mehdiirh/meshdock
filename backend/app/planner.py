@@ -45,8 +45,8 @@ def build(snapshot):
         entry_plan["method_count"] += 1
         exit_plan["method_count"] += 1
         # Destination checks run on the exit, including loopback services such as an existing proxy.
-        for plan in link["ports"]:
-            exit_plan["checks"].append({"host": plan["host"], "port": plan["target"]})
+        for mapping in link["ports"]:
+            exit_plan["checks"].append({"host": mapping["host"], "port": mapping["target"]})
     for plan in plans.values():
         pool = defaultdict(list)
         for mapping, host, port, link in plan.pop("backends"):
@@ -66,9 +66,7 @@ defaults
         for public, backends in sorted(pool.items()):
             policy = backends[0][2]["policy"]
             config += f'listen public_{public}\n  bind 0.0.0.0:{public}\n  balance {"roundrobin" if policy=="failover" else policy}\n'
-            for i, (host, port, link) in enumerate(
-                sorted(backends, key=lambda x: x[2]["slot"])
-            ):
+            for i, (host, port, link) in enumerate(sorted(backends, key=lambda x: x[2]["slot"])):
                 config += (
                     f'  server edge_{link["slot"]} {host}:{port} weight {link["weight"]} check inter 3s fall 3 rise 2'
                     + (" backup" if policy == "failover" and i else "")
@@ -76,13 +74,18 @@ defaults
                 )
                 plan["checks"].append({"host": host, "port": port})
             plan["listeners"].append(public)
-            plan["firewall"].append(
-                {"protocol": "tcp", "source": "0.0.0.0/0", "port": public}
-            )
+            plan["firewall"].append({"protocol": "tcp", "source": "0.0.0.0/0", "port": public})
         relays = plan.pop("relay")
-        for r in relays:
-            config += f'listen relay_{r["name"]}\n  bind {r["bind"]}:{r["port"]}\n  server target {r["host"]}:{r["target"]} check inter 3s\n'
-            plan["listeners"].append(r["port"])
+        for relay in relays:
+            tls = ""
+            if certificate := relay.get("certificate"):
+                tls = f" ssl crt {certificate} ssl-min-ver TLSv1.2"
+            config += (
+                f'listen relay_{relay["name"]}\n'
+                f'  bind {relay["bind"]}:{relay["port"]}{tls}\n'
+                f'  server target {relay["host"]}:{relay["target"]} check inter 3s\n'
+            )
+            plan["listeners"].append(relay["port"])
         if pool or relays:
             plan["files"]["haproxy.cfg"] = config
             plan["units"][f"tm-{namespace}-router.service"] = service(

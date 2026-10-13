@@ -63,7 +63,8 @@ def bootstrap():
             password = os.getenv("TM_ADMIN_PASSWORD", "")
             path = os.getenv("TM_ADMIN_PASSWORD_FILE")
             if path:
-                password = open(path).read().strip()
+                with open(path) as password_file:
+                    password = password_file.read().strip()
             if len(password) < 12:
                 raise RuntimeError(
                     "Set TM_ADMIN_PASSWORD or TM_ADMIN_PASSWORD_FILE (minimum 12 characters) for first startup."
@@ -92,7 +93,8 @@ def principal(request: Request, required="read"):
     with connect(True) as db:
         if auth.startswith("Bearer "):
             key = db.execute(
-                "SELECT * FROM api_keys WHERE token_hash=? AND revoked=0", (digest(auth[7:]),)
+                "SELECT * FROM api_keys WHERE token_hash=? AND revoked=0",
+                (digest(auth[7:]),),
             ).fetchone()
             if not key:
                 raise AppError("unauthorized", 401)
@@ -102,7 +104,8 @@ def principal(request: Request, required="read"):
             return "key:" + key["id"]
         token = request.cookies.get("tm_session", "")
         session = db.execute(
-            "SELECT * FROM sessions WHERE token_hash=? AND expires>?", (digest(token), time.time())
+            "SELECT * FROM sessions WHERE token_hash=? AND expires>?",
+            (digest(token), time.time()),
         ).fetchone()
         if not session:
             raise AppError("unauthorized", 401)
@@ -131,6 +134,8 @@ def redact(text, sensitive=()):
         text,
     )
     text = re.sub(
-        r"(?i)(password|token|secret|authorization)(\s*[:=]\s*)[^\s,;]+", r"\1\2[REDACTED]", text
+        r"(?i)(password|token|secret|authorization)(\s*[:=]\s*)[^\s,;]+",
+        r"\1\2[REDACTED]",
+        text,
     )
     return text[:4000]

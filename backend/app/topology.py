@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 
 from .db import audit, uid
 from .methods import REGISTRY
-from .security import AppError, seal
+from .security import AppError, seal, unseal
 from .tls import create_identity
 
 
@@ -16,14 +16,17 @@ def material():
     noise = x25519.X25519PrivateKey.generate()
     client = ed25519.Ed25519PrivateKey.generate()
     host = ed25519.Ed25519PrivateKey.generate()
-    pem = lambda k: k.private_bytes(
-        ser.Encoding.PEM, ser.PrivateFormat.OpenSSH, ser.NoEncryption()
-    ).decode()
-    pub = (
-        lambda k: k.public_key()
-        .public_bytes(ser.Encoding.OpenSSH, ser.PublicFormat.OpenSSH)
-        .decode()
-    )
+
+    def pem(key):
+        return key.private_bytes(
+            ser.Encoding.PEM, ser.PrivateFormat.OpenSSH, ser.NoEncryption()
+        ).decode()
+
+    def pub(key):
+        return (
+            key.public_key().public_bytes(ser.Encoding.OpenSSH, ser.PublicFormat.OpenSSH).decode()
+        )
+
     return {
         **create_identity(),
         "token": secrets.token_urlsafe(32),
@@ -66,7 +69,9 @@ def desired(db, private=False):
 
 def validate(db, body):
     servers = {s.id: s for s in body.servers}
-    if len(servers) != len(body.servers) or len({l.id for l in body.links}) != len(body.links):
+    if len(servers) != len(body.servers) or len({link.id for link in body.links}) != len(
+        body.links
+    ):
         raise AppError("invalid_topology")
     if len({s.address for s in body.servers}) != len(servers) or len(
         {(s.host, s.ssh_port) for s in body.servers}
@@ -77,34 +82,60 @@ def validate(db, body):
         raise AppError("not_found", 404)
     ports = {}
     graph = {}
-    for l in body.links:
-        if l.method not in REGISTRY:
+    for link in body.links:
+        if link.method not in REGISTRY:
             raise AppError("invalid_topology")
-        a, b = servers.get(l.entry_id), servers.get(l.exit_id)
+        a, b = servers.get(link.entry_id), servers.get(link.exit_id)
         if not a or not b or a.id == b.id or a.role == "exit" or b.role == "entry":
             raise AppError("invalid_topology")
-        if len({p.public for p in l.ports}) != len(l.ports):
+        if len({p.public for p in link.ports}) != len(link.ports):
             raise AppError("port_conflict")
-        if not l.enabled:
+        if not link.enabled:
             continue
         graph.setdefault(a.id, set()).add(b.id)
-        for p in l.ports:
+        for p in link.ports:
             # Internal ports are deterministic and reserved; don't collide with management SSH.
             if 20000 <= p.public <= 60999 or p.public == a.ssh_port:
                 raise AppError("reserved_port")
             k = (a.id, p.public)
-            if k in ports and ports[k] != l.policy:
+            if k in ports and ports[k] != link.policy:
                 raise AppError("pool_policy")
-            ports[k] = l.policy
+            ports[k] = link.policy
 
-    def walk(node, path):
-        if node in path:
+    control_ports = set()
+    for link in body.links:
+        if not link.enabled or link.control_port is None:
+            continue
+        adapter = REGISTRY[link.method]
+        protocol = adapter.control_protocol
+        if protocol is None:
+            raise AppError("invalid_topology")
+        server_id = (
+            link.entry_id if adapter.metadata["direction"] == "exit-to-entry" else link.exit_id
+        )
+        port = link.control_port
+        if 20000 <= port <= 60999 or (protocol == "tcp" and port == servers[server_id].ssh_port):
+            raise AppError("reserved_port")
+        listener = (server_id, protocol, port)
+        if listener in control_ports or (protocol == "tcp" and (server_id, port) in ports):
+            raise AppError("control_port_conflict")
+        control_ports.add(listener)
+
+    visiting, visited = set(), set()
+
+    def walk(node):
+        if node in visiting:
             raise AppError("topology_cycle")
-        for n in graph.get(node, ()):
-            walk(n, path | {node})
+        if node in visited:
+            return
+        visiting.add(node)
+        for neighbor in graph.get(node, ()):
+            walk(neighbor)
+        visiting.remove(node)
+        visited.add(node)
 
-    for n in graph:
-        walk(n, set())
+    for node in graph:
+        walk(node)
 
 
 def enqueue(db, actor, kind="deploy"):
@@ -132,8 +163,14 @@ def save(db, body, actor):
     validate(db, body)
     old = {r["id"]: dict(r) for r in db.execute("SELECT * FROM links")}
     # Do not recycle slots while old generations / recovery snapshots can reference them.
-    snapshots = [json.loads(r[0]) for r in db.execute("SELECT snapshot FROM jobs")]
-    used = {l["slot"] for s in snapshots for l in s.get("links", [])} | {
+    snapshots = [
+        json.loads(r[0])
+        for r in db.execute(
+            "SELECT snapshot FROM jobs WHERE status IN ('running','queued','retrying','recovering','recovery_required')"
+        )
+    ]
+    snapshots.append(json.loads(state["applied"]))
+    used = {link["slot"] for s in snapshots for link in s.get("links", [])} | {
         v["slot"] for v in old.values()
     }
     db.execute("UPDATE servers SET deleted=1")
@@ -158,10 +195,13 @@ def save(db, body, actor):
             ),
         )
     db.execute("DELETE FROM links")
-    for l in body.links:
-        if l.id in old:
-            slot = old[l.id]["slot"]
-            encrypted = old[l.id]["encrypted"]
+    for link in body.links:
+        if link.id in old:
+            slot = old[link.id]["slot"]
+            encrypted = old[link.id]["encrypted"]
+            stored = unseal(encrypted)
+            if "tls_cert" not in stored:
+                encrypted = seal({**stored, **create_identity()})
         else:
             slot = next((i for i in range(1, 1001) if i not in used), None)
             if slot is None:
@@ -169,19 +209,20 @@ def save(db, body, actor):
             used.add(slot)
             encrypted = seal(material())
         db.execute(
-            "INSERT INTO links VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO links(id,entry_id,exit_id,method,enabled,ports,policy,weight,slot,encrypted,created,control_port) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                l.id,
-                l.entry_id,
-                l.exit_id,
-                l.method,
-                int(l.enabled),
-                json.dumps([p.model_dump() for p in l.ports]),
-                l.policy,
-                l.weight,
+                link.id,
+                link.entry_id,
+                link.exit_id,
+                link.method,
+                int(link.enabled),
+                json.dumps([p.model_dump() for p in link.ports]),
+                link.policy,
+                link.weight,
                 slot,
                 encrypted,
                 time.time(),
+                link.control_port,
             ),
         )
     db.execute("UPDATE state SET revision=revision+1 WHERE id=1")

@@ -19,7 +19,7 @@ class Context:
 
     @property
     def control(self):
-        return 20000 + self.link["slot"]
+        return self.link.get("control_port") or 20000 + self.link["slot"]
 
     def internal(self, index):
         return 30000 + (self.link["slot"] - 1) * 16 + index
@@ -49,6 +49,7 @@ WantedBy=multi-user.target
 
 class Adapter:
     metadata: dict
+    control_protocol: str | None = "tcp"
 
     def configure(self, context, entry, exit):
         raise NotImplementedError

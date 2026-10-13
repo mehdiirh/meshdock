@@ -61,8 +61,12 @@ def delete_credential(id: str, actor=Depends(require("admin"))):
 @router.post("/servers/discover")
 def discover(body: models.Host, actor=Depends(require("admin"))):
     if settings.DEMO:
-        return {"fingerprint": "SHA256:" + "A" * 43, "algorithm": "ssh-ed25519", "simulated": True}
+        return {
+            "fingerprint": "SHA256:" + "A" * 43,
+            "algorithm": "ssh-ed25519",
+            "simulated": True,
+        }
     try:
         return ssh.discover(body.host, body.ssh_port)
     except Exception:
-        raise AppError("ssh_unreachable", 502)
+        raise AppError("ssh_unreachable", 502) from None

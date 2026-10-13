@@ -8,6 +8,5 @@ from .rathole import Rathole
 from .reverse_ssh import ReverseSSH
 
 REGISTRY = {
-    m.metadata["id"]: m
-    for m in (FrpWSS(), Hysteria2(), GRE(), Backhaul(), Rathole(), ReverseSSH())
+    m.metadata["id"]: m for m in (FrpWSS(), Hysteria2(), GRE(), Backhaul(), Rathole(), ReverseSSH())
 }

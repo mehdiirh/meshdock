@@ -13,7 +13,7 @@ class FrpWSS(Adapter):
         "protocols": ["tcp"],
         "requirements": ["outbound-tcp", "pinned-private-tls"],
         "priority": 1,
-        "score": 3.6,
+        "score": 3.65,
         "caveat": "private_tls",
     }
 
@@ -22,20 +22,31 @@ class FrpWSS(Adapter):
         token = json.dumps(context.secrets["token"])
         for plan in (entry, exit):
             plan["files"][name + "-ca.crt"] = context.secrets["tls_cert"]
-        entry["files"][name + "-tls.key"] = context.secrets["tls_key"]
+        # frps accepts plaintext WebSocket upgrades. The owned HAProxy listener
+        # terminates verified WSS and forwards only over loopback to frps.
+        entry["files"][name + "-tls.pem"] = context.secrets["tls_key"] + context.secrets["tls_cert"]
+        websocket_port = 22000 + context.link["slot"]
+        entry["relay"].append(
+            {
+                "name": f"wss_{context.link['slot']}",
+                "bind": "0.0.0.0",
+                "port": context.control,
+                "host": "127.0.0.1",
+                "target": websocket_port,
+                "certificate": f"{context.root}/{name}-tls.pem",
+            }
+        )
         ports = ", ".join(
             "{ single = " + str(context.internal(i)) + " }"
             for i in range(len(context.link["ports"]))
         )
-        entry["files"][name + ".toml"] = f"""bindAddr = "0.0.0.0"
-bindPort = {context.control}
+        entry["files"][name + ".toml"] = f"""bindAddr = "127.0.0.1"
+bindPort = {websocket_port}
 proxyBindAddr = "127.0.0.1"
 auth.method = "token"
 auth.token = {token}
 allowPorts = [{ports}]
-transport.tls.force = true
-transport.tls.certFile = "{context.root}/{name}-ca.crt"
-transport.tls.keyFile = "{context.root}/{name}-tls.key"
+transport.tls.force = false
 """
         client = f"""serverAddr = "{context.entry['address']}"
 serverPort = {context.control}
@@ -57,16 +68,14 @@ localPort = {port['target']}
 remotePort = {context.internal(index)}
 """
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append(
-                (port, "127.0.0.1", context.internal(index), context.link)
-            )
+            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
         exit["files"][name + ".toml"] = client
         for plan, binary in ((entry, "frps"), (exit, "frpc")):
             plan["binaries"].append(binary)
             plan["units"][context.tag + ".service"] = service(
                 f"/var/lib/tunnel-manager/{context.namespace}/bin/{binary} -c {context.root}/{name}.toml"
             )
-        entry["listeners"].append(context.control)
+        entry["listeners"].extend([context.control, websocket_port])
         entry["firewall"].append(
             {
                 "protocol": "tcp",

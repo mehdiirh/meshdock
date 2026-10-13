@@ -40,12 +40,19 @@ def recover(id: str, actor=Depends(require("admin"))):
 
 
 @router.get("/jobs/{id}/logs")
-def logs(id: str, request: Request, after: int = 0, lang: str = "", actor=Depends(require("read"))):
+def logs(
+    id: str,
+    request: Request,
+    after: int = 0,
+    lang: str = "",
+    actor=Depends(require("read")),
+):
     with connect() as db:
         rows = [
             dict(r)
             for r in db.execute(
-                "SELECT * FROM logs WHERE job_id=? AND id>? ORDER BY id LIMIT 500", (id, after)
+                "SELECT * FROM logs WHERE job_id=? AND id>? ORDER BY id LIMIT 500",
+                (id, after),
             )
         ]
     for r in rows:
@@ -55,7 +62,11 @@ def logs(id: str, request: Request, after: int = 0, lang: str = "", actor=Depend
 
 @router.get("/jobs/{id}/events")
 async def events(
-    id: str, request: Request, after: int = 0, lang: str = "", actor=Depends(require("read"))
+    id: str,
+    request: Request,
+    after: int = 0,
+    lang: str = "",
+    actor=Depends(require("read")),
 ):
     async def stream():
         cursor = after
@@ -78,7 +89,15 @@ async def events(
                 cursor = r["id"]
                 r["message"] = translate(r["code"], lang or language(request))
                 yield "id: " + str(cursor) + "\ndata: " + json.dumps(r) + "\n\n"
-            if not row or row[0] in ("succeeded", "failed", "superseded", "recovery_required"):
+            # Drain every persisted page before closing a completed job's stream.
+            if len(rows) == 200:
+                continue
+            if not row or row[0] in (
+                "succeeded",
+                "failed",
+                "superseded",
+                "recovery_required",
+            ):
                 yield "event: done\ndata: {}\n\n"
                 break
             yield ": heartbeat\n\n"

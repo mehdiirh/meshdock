@@ -60,7 +60,8 @@ class Remote:
                 self.t.auth_password("root", credential["secret"])
             else:
                 self.t.auth_publickey(
-                    "root", private_key(credential["secret"], credential.get("passphrase", ""))
+                    "root",
+                    private_key(credential["secret"], credential.get("passphrase", "")),
                 )
             self.t.set_keepalive(20)
             if not self.t.is_authenticated():
@@ -124,6 +125,7 @@ class Remote:
         raw = self.command(
             "python3 /var/lib/tunnel-manager/" + self.ns + "/agent.py",
             json.dumps({"namespace": self.ns, "action": action, **payload}).encode(),
+            timeout=1200 if action == "prepare" else 360,
         )
         result = json.loads(raw)
         if not result.get("ok"):

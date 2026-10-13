@@ -5,6 +5,8 @@ from .base import Adapter, service
 
 
 class Hysteria2(Adapter):
+    control_protocol = "udp"
+
     metadata = {
         "id": "hysteria2",
         "name": "Hysteria 2",
@@ -13,7 +15,7 @@ class Hysteria2(Adapter):
         "protocols": ["tcp"],
         "requirements": ["outbound-udp", "pinned-private-tls"],
         "priority": 2,
-        "score": 3.5,
+        "score": 3.55,
         "caveat": "udp_required",
     }
 
@@ -52,9 +54,7 @@ class Hysteria2(Adapter):
                 }
             )
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append(
-                (port, "127.0.0.1", context.internal(index), context.link)
-            )
+            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
         # JSON is accepted by Hysteria's configuration loader and avoids YAML quoting ambiguities.
         for plan, role, config in ((entry, "client", client), (exit, "server", server)):
             plan["files"][name + ".json"] = json.dumps(config, indent=2)
