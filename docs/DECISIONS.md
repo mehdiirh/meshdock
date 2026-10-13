@@ -16,6 +16,6 @@ Proceeding without blocking questions, as requested.
 
 Questions for later: preferred public domain/TLS termination; multi-tenant workspaces and non-admin roles; UDP priorities; IPv6; desired retention and alert integrations; hardware scale targets and provider firewall integration.
 
-- Port range limits are explicit application limits: 512 expanded ports for Backhaul, Rathole, FRP and Hysteria; 64 for reverse SSH; full port space for native GRE, subject to exclusions and conflicts. These limits can evolve through adapter metadata and validation.
+- Removed the former 512/64 application caps after checking upstream configurations. All adapters accept full TCP ranges subject to listener allocation, management/control conflicts, actual descriptor limits and outgoing port space. Reverse SSH splits forwards across sessions of 4,096, leaving channel headroom. This is not a throughput or universal hardware-capacity guarantee; see PORT-MAPPINGS.md for sources and tested boundaries.
 - Large GRE ranges use Linux kernel forwarding. Socket adapters retain HAProxy pools. Mixed single/range GRE connections use the kernel path for every row and cannot share those public ports with another connection.
 - Internal allocations belong to immutable deployment manifests, not a globally reserved public band. Existing compact JSON storage supports range intent without schema mutation; startup/migration preservation is tested.

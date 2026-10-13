@@ -44,4 +44,4 @@ Use Black for Python formatting, Ruff for correctness/import checks and Prettier
 
 ## Mapping compiler
 
-`ports.py` parses and splits compact range intent while retaining target offsets. `allocation.py` derives control and intermediate listener allocations per snapshot, bind address and server. Socket adapters receive bounded expanded mappings; native adapters receive compact intent. `gre_forwarding.py` generates namespaced kernel rules. Capability metadata drives frontend validation; API handlers do not branch on method IDs. See [PORT-MAPPINGS.md](PORT-MAPPINGS.md).
+`ports.py` parses and splits compact range intent while retaining target offsets. `allocation.py` derives control and intermediate listener allocations per snapshot, bind address and server. Socket adapters receive expanded mappings within the TCP port space, with per-link loopback allocation and SSH health groups; native adapters receive compact intent. `gre_forwarding.py` generates namespaced kernel rules. Capability metadata drives frontend validation; API handlers do not branch on method IDs. See [PORT-MAPPINGS.md](PORT-MAPPINGS.md).
