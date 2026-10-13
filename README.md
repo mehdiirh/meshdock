@@ -82,4 +82,4 @@ Create a scoped API key in Access & activity. The plaintext is returned once. Se
 
 ## Validation status
 
-This project includes migration, authentication, planner, rollback, recovery, fencing, localization and UI regression tests, plus opt-in real-binary loopback smoke tests. It has **not been validated against production hosts or live filtering conditions**. Linux systemd/firewall behavior needs an isolated staging deployment before production use. Check [operations](docs/OPERATIONS.md) for the staged rollout procedure.
+This project includes migration, authentication, planner, rollback, recovery, fencing, localization and UI regression tests, plus opt-in real-binary loopback smoke tests. It has **not been validated against production hosts or live filtering conditions**. Linux systemd/firewall behavior needs an isolated staging deployment before production use. Read the [verification record](docs/VERIFICATION.md) for exact test results and [operations](docs/OPERATIONS.md) for the staged rollout procedure.
