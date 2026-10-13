@@ -31,3 +31,5 @@
 - Emit only allowlisted, sanitized operational progress over SSH. Persist progress before streaming to clients; identify the failing server and phase. The collapsed deployment footer follows the latest revision, and failure coloring applies to affected links only.
 
 - Keep applied-only connections and missing endpoints visible until deletion commits. Expose only allowlisted public snapshot fields. Restore must preserve slots and encrypted identities, validate current topology conflicts, and remain fenced during deployment/recovery. Test failed removal, partial apply, cancellation, retry, and restoration without touching live hosts.
+
+- SSH jump settings are snapshot-owned endpoint configuration. Pin and authenticate both hops independently; keep secrets in the vault, protect referenced credentials, and preserve the saved route for cleanup/rollback. Never forward SSH agents, copy private keys onto jump hosts, change SSH daemon policy, or silently fall back to direct access. Test discovery, apply, rollback, credential retention and failure cleanup; run the opt-in loopback SSH/SFTP suite when changing transport behavior.

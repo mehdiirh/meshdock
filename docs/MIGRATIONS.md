@@ -15,3 +15,5 @@ For a schema change:
 SQLite requires batch table-copy operations for some alterations; Alembic is configured for batch mode. Keep changes additive while older workers might exist. Stop API and worker for incompatible upgrades and deploy both from the same release.
 
 Back up through SQLite's backup API before upgrades; preserve the encryption key separately. Restore the matching database/key/application release for destructive downgrades. Migration history belongs in source control; user database files do not.
+
+Revision `af62c83419de` adds the optional `servers.ssh_jump` JSON text column with a `null` default. Existing servers and revision snapshots continue to use direct SSH. Normal startup applies this migration; stop API and worker and back up the database and matching encryption key before upgrading a deployed controller.

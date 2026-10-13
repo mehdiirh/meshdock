@@ -30,6 +30,7 @@ No external proxy application, existing SSH configuration, default route or unre
    ```
 
    Replace the namespace with the value from `GET /api/v1/topology`. This command refuses while the current generation contains services; complete step 1 first. It removes the helper, generation files, private tunnel keys and binaries for this installation. It leaves shared packages and other installations alone.
+
 4. Remove servers/credentials from the control plane as appropriate, or archive the database/key backup and remove the controller's Docker volume manually. `docker compose down` deliberately retains data.
 
 A host that is offline cannot be cleaned up until access is restored. Do not treat a recovery-required job as successful cleanup.
@@ -46,7 +47,7 @@ The UI stores structured per-host phase events and errors. It deliberately does 
 
 A recovery-required job blocks changes. Restore management access, confirm the host fingerprint has not changed unexpectedly, then select “Retry rollback.” Review the restored state and explicitly deploy again. Fingerprints are never auto-updated.
 
-Management SSH must be reachable from the **controller**, even when intentionally blocked from other remote servers. GRE data-plane reachability and SSH control-plane reachability are separate requirements.
+Management SSH must be reachable from the **controller**, directly or through a configured [SSH jump host](#ssh-jump-hosts), even when intentionally blocked from other remote servers. GRE data-plane reachability and SSH control-plane reachability are separate requirements.
 
 ## Failed connection removal
 
@@ -79,7 +80,6 @@ docker run --rm --privileged --network none meshdock-network-test
 
 It exercises full-range boundary ports, the formerly reserved band, exceptions, shifted ranges, restoration of a previous generation, injected partial-rule failure, preservation of unrelated firewall rules, and restoration of interface forwarding settings. It complements the systemd/SSH/host-restart staging checklist above.
 
-
 The same isolated image includes full-range HAProxy validators, a 4,097-forward SSH test spanning two sessions, and a Linux source-port exhaustion regression. Run them without external networking or host mounts:
 
 ```sh
@@ -87,3 +87,51 @@ docker run --rm --privileged --network none meshdock-network-test uv run --no-sy
 ```
 
 The SSH test adjusts only the disposable container's locked root test account and temporary fixture permissions. It must never run against a production host. The default skip condition requires both explicit opt-in and a container. Full-range runtime throughput/memory sizing still needs staging; a valid large configuration is not a capacity benchmark.
+
+## SSH jump hosts
+
+When a managed server cannot accept SSH directly from the controller, configure one intermediate SSH server under **Edit server → SSH access → Via jump host**. For example:
+
+```text
+MeshDock controller → reachable entry server → restricted entry server
+```
+
+This is the management path for discovery, deployment, file transfer, health checks, cleanup and rollback. Application traffic continues to use the tunnel endpoints and method configured on the canvas.
+
+Prepare the following:
+
+- The controller can reach the jump host's SSH port.
+- The jump host can reach the target's SSH address and port. Target hostnames are resolved by the jump host.
+- The jump account can use SSH TCP forwarding to that destination (`AllowTcpForwarding`, authorized-key restrictions and `PermitOpen` must permit it). MeshDock does not modify these policies.
+- Save credentials for both hosts in the SSH vault. Passwords and private keys, including passphrase-protected keys, are supported independently on each hop. The target requires root; the jump account can be an unprivileged account allowed to forward.
+
+Select a saved directly reachable server to copy its management details, or enter a custom jump host. Verify its fingerprint independently, then continue to discover and verify the **target's** fingerprint through that path. Authentication checks each host's pinned key before sending that host's credentials. Keys are never copied to the jump server and SSH agent forwarding is not used.
+
+A saved-server choice is a copy of its settings. Later edits or deletion of that inventory card do not change the target's saved jump configuration. Edit affected targets explicitly when rotating the jump host or its credential. Only one intermediate host is supported; chained jump hosts are rejected.
+
+The API accepts an optional `ssh_jump` object on each server in `PUT /api/v1/topology`, and on `POST /api/v1/servers/discover`:
+
+```json
+{
+  "host": "192.0.2.20",
+  "ssh_port": 22,
+  "ssh_jump": {
+    "host": "192.0.2.10",
+    "ssh_port": 22,
+    "username": "operator",
+    "credential_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fingerprint": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}
+```
+
+This is a discovery request; topology server records also require the usual ID, role, transport address and target credential. Replace fixture values with verified details. Use `ssh_jump: null` for direct access. Secrets stay in the encrypted vault, while revision snapshots retain the addresses, pins and credential references needed for rollback. Referenced jump credentials cannot be deleted while needed by active inventory, deployed state or pending recovery.
+
+Changing only the management path does not restart unchanged tunnel services. Keep the preceding jump path available until any in-flight deployment or rollback finishes; recovery uses the path saved with that operation. There is no automatic fallback to direct SSH. Errors distinguish jump connectivity, jump authentication, jump-key changes and forwarding failure.
+
+Developer verification uses two temporary SSH servers bound only to loopback. It covers password/key authentication, host-key rejection, forwarding denial, commands and SFTP without contacting external servers:
+
+```bash
+cd backend
+MESHDOCK_TEST_SSH_LOOPBACK=1 uv run python -m pytest -q tests/test_ssh_jump_loopback.py
+```

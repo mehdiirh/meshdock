@@ -156,6 +156,8 @@ For example, users can connect to an entry server in Iran while an exit server i
 4. **Save and follow the deployment.** **Save & deploy** queues the change. MeshDock installs required tunnel packages, writes its managed configuration, starts services, and runs health checks. Open **Deployments** to follow progress.
 5. **Test the actual application.** Connect a client through the entry server and verify traffic. An applied revision confirms deployment checks passed; it is not a continuous uptime or speed measurement.
 
+**Cannot reach a server directly?** In its SSH access step, choose **Via jump host**. Select a saved reachable server or enter a custom host, then choose that host's credential and verify both fingerprints. For example, MeshDock can reach a restricted entry server through an older entry server. The jump host must be reachable from MeshDock and permit SSH forwarding to the target. This carries management traffic only; it does not reroute your users' tunnel traffic. See [SSH jump host setup](docs/OPERATIONS.md#ssh-jump-hosts).
+
 Click a line to edit or switch its method. Drag an endpoint to change its destination. Hold **Shift** to select servers, then choose **Connect selected** for batch connections. Moving a card changes only the layout and does not deploy anything.
 
 ### Port ranges and multiple destinations
@@ -186,8 +188,8 @@ Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No
 ### Before you start
 
 - **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443** for Caddy.
-- **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller, and public IPv4 transport addresses.
-- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall and forwarding rules inside the servers. Management SSH must be reachable from the controller even if it is blocked between tunnel peers.
+- **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller (directly or through an SSH jump host), and public IPv4 transport addresses.
+- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall and forwarding rules inside the servers. Management SSH must be reachable directly from the controller or through a configured SSH jump host, even if it is blocked between tunnel peers.
 - **Destination application:** Have Xray/3x-ui, your web server, or another TCP application running at the destination host and port. You do not need to preinstall the tunnel software; MeshDock installs and configures that during deployment.
 
 On a **fresh checkout with no `.env`**, replace the example domain and run:
