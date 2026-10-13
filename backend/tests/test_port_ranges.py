@@ -273,3 +273,59 @@ def test_ranges_survive_restart_and_normal_schema_validation(admin):
     migrate()
     migrate()
     assert admin.get("/api/v1/topology").json() == before
+
+
+def test_internal_allocation_respects_destination_exceptions_and_bind_address(admin):
+    value, first = single_link(admin)
+    middle = next(server for server in value["servers"] if server["id"] == first["exit_id"])
+    middle["role"] = "both"
+    last = next(
+        server
+        for server in value["servers"]
+        if server["role"] == "exit" and server["id"] != middle["id"]
+    )
+    first["ports"] = [
+        {"public": "1023-65535", "target": "1023-65535", "host": "127.0.0.1", "exclude": [30000]}
+    ]
+    value["links"].append(
+        {
+            **copy.deepcopy(first),
+            "id": "e" * 32,
+            "entry_id": middle["id"],
+            "exit_id": last["id"],
+            "method": "rathole",
+            "ports": [{"public": 443, "target": 8443, "host": "127.0.0.1"}],
+        }
+    )
+    assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
+    with connect() as database:
+        plans = build(topology.desired(database, True))
+    assert {
+        item["port"] for item in plans[middle["id"]]["sockets"] if item["address"] == "127.0.0.1"
+    } == {30000}
+
+
+def test_control_port_cannot_replace_a_declared_destination_service(admin):
+    value, link = single_link(admin, "rathole")
+    # Reverse direction control listens on the entry. Add a preceding entry so
+    # this control server also has a declared public-address application target.
+    original_entry = next(s for s in value["servers"] if s["id"] == link["entry_id"])
+    original_entry["role"] = "both"
+    other = next(
+        s for s in value["servers"] if s["role"] == "entry" and s["id"] != original_entry["id"]
+    )
+    link["control_port"] = 8443
+    value["links"].append(
+        {
+            **copy.deepcopy(link),
+            "id": "e" * 32,
+            "entry_id": other["id"],
+            "exit_id": original_entry["id"],
+            "method": "gre",
+            "control_port": None,
+            "ports": [{"public": 9443, "target": 8443, "host": original_entry["address"]}],
+        }
+    )
+    assert (
+        admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "control_port_conflict"
+    )

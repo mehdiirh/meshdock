@@ -1,11 +1,10 @@
 """Deterministic allocations belong to a deployment plan, never to a reserved public band."""
 
 from collections import defaultdict
-from ipaddress import IPv4Address
 from itertools import chain
 
 from .methods import REGISTRY
-from .ports import contains, expand
+from .ports import contains, expand, segments
 from .security import AppError
 
 
@@ -19,9 +18,10 @@ def allocate(snapshot):
     targets = defaultdict(list)
     for link in links:
         public[link["entry_id"]].extend(link["ports"])
-        targets[link["exit_id"]].extend(
-            p for p in link["ports"] if IPv4Address(p["host"]).is_loopback
-        )
+        for mapping in link["ports"]:
+            targets[(link["exit_id"], mapping["host"])].extend(
+                (start, end) for _, _, start, end in segments(mapping)
+            )
         adapter = REGISTRY[link["method"]]
         adapter.validate_mappings(link)
         if adapter.control_protocol and link.get("control_port"):
@@ -41,7 +41,12 @@ def allocate(snapshot):
                 if adapter.metadata["direction"] == "exit-to-entry"
                 else link["exit_id"]
             )
+            destination_ports = targets[(server, servers[server]["address"])]
             if link.get("control_port"):
+                if protocol == "tcp" and any(
+                    start <= link["control_port"] <= end for start, end in destination_ports
+                ):
+                    raise AppError("control_port_conflict")
                 link["allocated_control"] = link["control_port"]
             else:
                 candidates = chain([20000 + link["slot"]], range(1024, 65536))
@@ -55,6 +60,7 @@ def allocate(snapshot):
                             or (
                                 p != servers[server]["ssh_port"]
                                 and not any(contains(mapping, p) for mapping in public[server])
+                                and not any(start <= p <= end for start, end in destination_ports)
                             )
                         )
                     ),
@@ -88,18 +94,7 @@ def allocate(snapshot):
                     if p <= 65535
                     and p not in internal[key]
                     and p != servers[server]["ssh_port"]
-                    and not any(
-                        contains(
-                            {
-                                **mapping,
-                                "public": mapping["target"],
-                                "target": mapping["target"],
-                                "exclude": [],
-                            },
-                            p,
-                        )
-                        for mapping in (targets[server] if bind == "127.0.0.1" else [])
-                    )
+                    and not any(start <= p <= end for start, end in targets[key])
                 ),
                 None,
             )
