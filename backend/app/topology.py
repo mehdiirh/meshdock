@@ -178,7 +178,9 @@ def save(db, body, actor):
     if db.execute("SELECT 1 FROM jobs WHERE status='recovery_required'").fetchone():
         raise AppError("recovery_required", 409)
     validate(db, body)
-    old = {r["id"]: dict(r) for r in db.execute("SELECT * FROM links")}
+    # Restoring a removed link must retain its slot and encrypted tunnel identity.
+    old = {link["id"]: link for link in json.loads(state["applied"]).get("links", [])}
+    old.update({r["id"]: dict(r) for r in db.execute("SELECT * FROM links")})
     # Do not recycle slots while old generations / recovery snapshots can reference them.
     snapshots = [
         json.loads(r[0])

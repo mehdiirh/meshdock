@@ -269,3 +269,9 @@ msgstr "Configuration validated and ready for activation."
 
 msgid "package_network"
 msgstr "The package repository connection failed. Check outbound connectivity and the reported package command; MeshDock uses IPv4 for package downloads."
+
+msgid "removal_busy"
+msgstr "Wait for the current deployment to finish before retrying or restoring a removal."
+
+msgid "restore_endpoint_changed"
+msgstr "The endpoint settings changed after deployment. Restore those settings before restoring this connection."

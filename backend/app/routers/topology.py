@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
+from .. import removals, topology
 from .. import schemas as models
-from .. import topology
 from ..db import connect
 from ..security import AppError, require
 
@@ -15,7 +15,8 @@ def language(request):
 @router.get("/topology")
 def get_topology(actor=Depends(require("read"))):
     with connect() as db:
-        return topology.desired(db)
+        desired = topology.desired(db)
+        return {**desired, **removals.view(db, desired)}
 
 
 @router.put("/topology")
@@ -99,3 +100,15 @@ def cleanup(body: models.Revision, actor=Depends(require("admin"))):
             ),
             actor,
         )
+
+
+@router.post("/links/{id}/retry-removal", status_code=202)
+def retry_removal(id: str, body: models.Revision, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        return removals.resolve(db, id, body.revision, actor, restore=False)
+
+
+@router.post("/links/{id}/restore", status_code=202)
+def restore_removal(id: str, body: models.Revision, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        return removals.resolve(db, id, body.revision, actor, restore=True)
