@@ -14,8 +14,9 @@ export interface Server {
   position: { x: number; y: number };
 }
 export interface Port {
-  public: number;
-  target: number;
+  public: number | string;
+  target: number | string;
+  exclude?: (number | string)[];
   host: string;
 }
 export interface Link {
@@ -48,6 +49,15 @@ export interface MethodInfo {
   direction: string;
   protocols: string[];
   requirements: string[];
+  mapping: {
+    ranges: boolean;
+    exceptions: boolean;
+    native_ranges: boolean;
+    max_ports: number;
+    max_listener_ports: number;
+    protocols: string[];
+    platforms: string[];
+  };
   control_protocol?: "tcp" | "udp" | null;
   priority?: number;
   score?: number;

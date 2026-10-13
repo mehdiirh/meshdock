@@ -1852,3 +1852,22 @@ fieldset.field legend {
   color: var(--muted);
   margin-bottom: 8px;
 }
+
+.mapping-summary {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  animation: fade-in 180ms ease-out;
+}
+.mapping-summary strong {
+  font-size: 14px;
+}
+.port-card small {
+  display: block;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}

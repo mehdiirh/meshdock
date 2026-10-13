@@ -85,6 +85,12 @@ export function Workspace({
           files: string[];
           ports: number[];
           udp_ports: number[];
+          forwarded_ranges: {
+            address: string;
+            protocol: string;
+            start: number;
+            end: number;
+          }[];
         }[]
       >("/preview"),
     enabled: planOpen,
@@ -687,6 +693,19 @@ export function Workspace({
                 <pre>{p.files.join("\n") || "—"}</pre>
                 <strong>{t("ports")}</strong>
                 <code>{p.ports.join(", ") || "—"}</code>
+                {!!p.forwarded_ranges?.length && (
+                  <>
+                    <strong>{t("forwardedRanges")}</strong>
+                    <pre>
+                      {p.forwarded_ranges
+                        .map(
+                          (range) =>
+                            `${range.address} · ${range.protocol.toUpperCase()} · ${range.start}-${range.end}`,
+                        )
+                        .join("\n")}
+                    </pre>
+                  </>
+                )}
                 <strong>{t("udpPorts")}</strong>
                 <code>{p.udp_ports?.join(", ") || "—"}</code>
               </article>

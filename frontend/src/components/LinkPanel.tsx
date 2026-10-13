@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import { mappingStatus } from "../ports";
 import type { Link, Server, MethodInfo, Policy } from "../types";
 import { Field, ErrorMessage, Spinner } from "./Primitives";
 export function LinkPanel({
@@ -34,11 +35,19 @@ export function LinkPanel({
 }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(link);
+  const [exclusions, setExclusions] = useState(
+    link.ports.map((p) => (p.exclude || []).join(", ")),
+  );
   const methods = useQuery({
     queryKey: ["methods"],
     queryFn: () => api<MethodInfo[]>("/methods"),
   });
   const method = methods.data?.find((m) => m.id === value.method);
+  const status = mappingStatus(
+    value.ports,
+    method,
+    servers.find((s) => s.id === value.entry_id)?.ssh_port,
+  );
   return (
     <aside className="inspector">
       <header>
@@ -61,7 +70,7 @@ export function LinkPanel({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(value);
+          if (!status.error && method) onSave(value);
         }}
       >
         <div className="route-preview">
@@ -152,16 +161,16 @@ export function LinkPanel({
                 <input
                   className="mono"
                   aria-label={`${t("publicPort")} ${i + 1}`}
-                  type="number"
+                  type="text"
+                  dir="ltr"
+                  placeholder="8000-8099"
                   required
-                  min={1}
-                  max={65535}
                   value={port.public}
                   onChange={(e) =>
                     setValue((v) => ({
                       ...v,
                       ports: v.ports.map((p, n) =>
-                        n === i ? { ...p, public: Number(e.target.value) } : p,
+                        n === i ? { ...p, public: e.target.value } : p,
                       ),
                     }))
                   }
@@ -172,16 +181,16 @@ export function LinkPanel({
                 <input
                   className="mono"
                   aria-label={`${t("targetPort")} ${i + 1}`}
-                  type="number"
+                  type="text"
+                  dir="ltr"
+                  placeholder="8000-8099"
                   required
-                  min={1}
-                  max={65535}
                   value={port.target}
                   onChange={(e) =>
                     setValue((v) => ({
                       ...v,
                       ports: v.ports.map((p, n) =>
-                        n === i ? { ...p, target: Number(e.target.value) } : p,
+                        n === i ? { ...p, target: e.target.value } : p,
                       ),
                     }))
                   }
@@ -192,16 +201,50 @@ export function LinkPanel({
                 type="button"
                 className="icon-button"
                 disabled={value.ports.length === 1}
-                onClick={() =>
+                onClick={() => {
+                  setExclusions((items) => items.filter((_, n) => n !== i));
                   setValue((v) => ({
                     ...v,
                     ports: v.ports.filter((_, n) => n !== i),
-                  }))
-                }
+                  }));
+                }}
               >
                 <Trash2 size={14} />
               </button>
             </div>
+            <Field label={t("excludedPorts")}>
+              <input
+                className="mono"
+                dir="ltr"
+                type="text"
+                aria-label={`${t("excludedPorts")} ${i + 1}`}
+                placeholder="8080, 9000-9010"
+                value={exclusions[i] || ""}
+                onChange={(event) => {
+                  const text = event.target.value;
+                  setExclusions((items) => {
+                    const next = [...items];
+                    next[i] = text;
+                    return next;
+                  });
+                  setValue((v) => ({
+                    ...v,
+                    ports: v.ports.map((p, n) =>
+                      n === i
+                        ? {
+                            ...p,
+                            exclude: text
+                              .split(",")
+                              .map((part) => part.trim())
+                              .filter(Boolean),
+                          }
+                        : p,
+                    ),
+                  }));
+                }}
+              />
+            </Field>
+            <small className="muted">{t("exclusionHint")}</small>
             <Field label={t("targetHost")}>
               <input
                 className="mono"
@@ -219,37 +262,59 @@ export function LinkPanel({
             </Field>
           </div>
         ))}
-        <p className="small muted">{t("reservedPorts")}</p>
-        <Field label={t("policy")}>
-          <div className="policy-options">
-            {(["roundrobin", "leastconn", "failover"] as Policy[]).map(
-              (policy) => (
-                <button
-                  key={policy}
-                  type="button"
-                  className={value.policy === policy ? "active" : ""}
-                  onClick={() => setValue((v) => ({ ...v, policy }))}
-                >
-                  {t(policy)}
-                </button>
-              ),
-            )}
+        <div className="mapping-summary" aria-live="polite">
+          <strong>{t("mappedPortCount", { count: status.count })}</strong>
+          <span>
+            {t(status.native ? "nativeRangeMode" : "expandedRangeMode", {
+              max: method?.mapping.max_listener_ports,
+            })}
+          </span>
+          <small>{t("mappingPlatform")}</small>
+        </div>
+        {status.error && (
+          <div role="alert" className="error">
+            {t(status.error, { max: method?.mapping.max_ports })}
           </div>
-        </Field>
-        <p className="small muted">{t("poolHint")}</p>
+        )}
+        <p className="small muted">{t("actualPortConflicts")}</p>
+        {status.native ? (
+          <p className="small muted">{t("nativePoolHint")}</p>
+        ) : (
+          <>
+            <Field label={t("policy")}>
+              <div className="policy-options">
+                {(["roundrobin", "leastconn", "failover"] as Policy[]).map(
+                  (policy) => (
+                    <button
+                      key={policy}
+                      type="button"
+                      className={value.policy === policy ? "active" : ""}
+                      onClick={() => setValue((v) => ({ ...v, policy }))}
+                    >
+                      {t(policy)}
+                    </button>
+                  ),
+                )}
+              </div>
+            </Field>
+            <p className="small muted">{t("poolHint")}</p>
+          </>
+        )}
         <div className="form-grid">
-          <Field label={t("weight")}>
-            <input
-              type="number"
-              min={1}
-              max={256}
-              required
-              value={value.weight}
-              onChange={(e) =>
-                setValue((v) => ({ ...v, weight: Number(e.target.value) }))
-              }
-            />
-          </Field>
+          {!status.native && (
+            <Field label={t("weight")}>
+              <input
+                type="number"
+                min={1}
+                max={256}
+                required
+                value={value.weight}
+                onChange={(e) =>
+                  setValue((v) => ({ ...v, weight: Number(e.target.value) }))
+                }
+              />
+            </Field>
+          )}
           <label className="checkbox">
             <input
               type="checkbox"
@@ -261,11 +326,16 @@ export function LinkPanel({
             {t("enabled")}
           </label>
         </div>
-        <p className="small muted">{t("destinationRequired")}</p>
+        <p className="small muted">
+          {t(status.native ? "nativeHealthHint" : "destinationRequired")}
+        </p>
         <ErrorMessage error={error || methods.error} />
         <div className="inspector-footer">
           <p>{t("deploymentHint")}</p>
-          <button className="button primary full" disabled={pending}>
+          <button
+            className="button primary full"
+            disabled={pending || !!status.error || !method}
+          >
             {pending ? <Spinner /> : <Save size={16} />} {t("save")}
           </button>
           {onDelete && (
