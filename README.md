@@ -65,7 +65,28 @@ Requirements: Python 3.12+, uv, Node.js 22+, npm.
 ./scripts/dev.sh
 ```
 
-The frontend runs at `http://127.0.0.1:5177`, API at `http://127.0.0.1:8017`. The script defaults a fresh setup to simulation mode. It does not overwrite an existing `.env`.
+The frontend runs at `http://127.0.0.1:5177`, API at `http://127.0.0.1:8017`.
+The script **always runs in demo mode by default**, even if `.env` or your shell
+sets `TM_DEMO=false`. Only this explicit flag enables real server deployments:
+
+```sh
+./scripts/dev.sh --prod
+```
+
+`--prod` still runs the local development servers; use Docker for hosting the
+production service. Saving tunnel changes in this mode can modify your servers.
+Stop the current launcher before switching modes; both use the same local ports.
+
+Demo data and encryption keys live in `.data/demo`; real mode uses `.data/prod`.
+The launcher overrides `TM_DATA_DIR` and `TM_MASTER_KEY_FILE` to keep these stores
+separate. Existing files directly in `.data` are preserved but are not loaded or
+automatically migrated. Never copy a demo database into the real store.
+
+If `.env` is absent, the launcher generates it with a unique admin password and
+safe demo settings. Existing `.env` files are never overwritten. Read the generated
+`TM_ADMIN_PASSWORD` there to sign in. [sample.env](sample.env) documents the available
+settings and is also provided as `.env.example`; replace its placeholder password
+if configuring manually. Admin credentials only initialize a new database.
 
 ```sh
 uv sync --project backend --frozen

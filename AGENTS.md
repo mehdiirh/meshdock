@@ -2,6 +2,7 @@
 
 - This is an open-source control plane. Never commit production IPs, hostnames, credentials, private keys, database files, logs, or user topology exports. Use RFC 5737 addresses in examples.
 - Backend lives in backend/, frontend in frontend/. Keep adapters in backend/app/methods; extend the registry rather than adding method-specific branches to API handlers.
+- `scripts/dev.sh` must force simulation unless `--prod` is explicitly passed, regardless of `.env` or inherited variables. Keep demo and real development databases and encryption keys separate; test both launch modes without contacting servers. Keep `sample.env` and `.env.example` identical and free of secrets.
 - Default tests use simulated SSH and isolated state. Never connect to or change a real server unless the human explicitly authorizes that specific deployment.
 - All mutating topology operations require authentication, optimistic revision checks, audit entries, and durable reconciliation jobs. Coordinates and other presentation changes must not deploy remote resources.
 - Secrets are encrypted at rest and are never returned after creation. Logs, previews, errors, and exports must not reveal secrets. Pin SSH host keys; never auto-trust changes.
