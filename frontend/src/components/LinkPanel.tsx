@@ -19,7 +19,7 @@ import type {
   Policy,
   MethodSettings,
 } from "../types";
-import { settingsValid } from "../methodSettings";
+import { settingsValid, transportDetails } from "../methodSettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { Field, ErrorMessage, Spinner } from "./Primitives";
 export function LinkPanel({
@@ -54,6 +54,7 @@ export function LinkPanel({
     queryFn: () => api<MethodInfo[]>("/methods"),
   });
   const method = methods.data?.find((m) => m.id === value.method);
+  const transport = transportDetails(method, value.settings);
   const validSettings = settingsValid(method?.settings_schema, value.settings);
   const status = mappingStatus(
     value.ports,
@@ -117,10 +118,34 @@ export function LinkPanel({
             ))}
           </div>
         </Field>
-        <div className={"method-note " + (method?.encrypted ? "secure" : "")}>
-          {method?.encrypted ? <ShieldCheck size={14} /> : <Radio size={14} />}
-          <span>{t(method?.encrypted ? "encrypted" : "unencrypted")}</span>
+        <div className={"method-note " + (transport.encrypted ? "secure" : "")}>
+          {transport.encrypted ? (
+            <ShieldCheck size={14} />
+          ) : (
+            <Radio size={14} />
+          )}
+          <span>{t(transport.encrypted ? "encrypted" : "unencrypted")}</span>
         </div>
+        {"architectures" in transport &&
+          transport.architectures?.length === 1 && (
+            <p className="small muted">
+              {t("advanced.architectureLimit", {
+                architectures: transport.architectures.join(", "),
+              })}
+            </p>
+          )}
+        {transport.tls_mode !== "none" && (
+          <p
+            className="small muted"
+            data-testid="transport-tls"
+            aria-live="polite"
+          >
+            {t("advanced.tls." + transport.tls_mode)}
+          </p>
+        )}
+        {transport.control_protocols.length > 1 && (
+          <p className="small muted">{t("advanced.dualProtocol")}</p>
+        )}
         {method?.caveat && (
           <p className="small muted method-caveat">
             {t("caveats." + method.caveat)}
@@ -136,7 +161,7 @@ export function LinkPanel({
           />
         )}
         <p className="small muted">{t("advanced.switchHint")}</p>
-        {method?.control_protocol && (
+        {transport.control_protocols.length > 0 && (
           <Field label={t("controlPort")}>
             <input
               aria-label={t("controlPort")}
@@ -157,7 +182,7 @@ export function LinkPanel({
             />
             <small className="muted">
               {t("controlPortHint", {
-                protocol: method.control_protocol.toUpperCase(),
+                protocol: transport.control_protocols.join(" + ").toUpperCase(),
               })}
             </small>
           </Field>

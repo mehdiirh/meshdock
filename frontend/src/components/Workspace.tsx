@@ -1,4 +1,5 @@
 import { removeServer, replaceServer, replaceLink } from "../topology";
+import { linkDeploymentStatus, failedDeployment } from "../deployments";
 import { compactPorts } from "../ports";
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,7 +33,7 @@ import {
   RotateCcw,
   FileSearch,
 } from "lucide-react";
-import { api, useTopology, useSaveTopology } from "../api";
+import { api, useTopology, useSaveTopology, useJobs } from "../api";
 import { newId, type Server, type Link, type Topology } from "../types";
 import { ServerNode, type ServerFlowNode } from "./ServerNode";
 import { ServerDialog } from "./ServerDialog";
@@ -60,6 +61,7 @@ export function Workspace({
   const { t } = useTranslation();
   const cache = useQueryClient();
   const query = useTopology();
+  const jobs = useJobs();
   const save = useSaveTopology();
   const flow = useReactFlow<ServerFlowNode>();
   const [nodes, setNodes, onNodesChange] = useNodesState<ServerFlowNode>([]);
@@ -125,39 +127,77 @@ export function Workspace({
         selected: old.find((n) => n.id === server.id)?.selected,
         data: {
           server,
-          status:
-            topology.revision === topology.applied_revision
-              ? "succeeded"
-              : "queued",
+          status: (() => {
+            const states = topology.links
+              .filter(
+                (l) =>
+                  l.enabled &&
+                  (l.entry_id === server.id || l.exit_id === server.id),
+              )
+              .map((l) =>
+                linkDeploymentStatus(
+                  l.id,
+                  topology.revision,
+                  topology.applied_revision,
+                  jobs.data,
+                ),
+              );
+            return (
+              states.find(failedDeployment) ||
+              states.find((s) => s !== "succeeded") ||
+              "succeeded"
+            );
+          })(),
           edit: () => setServerDialog(server),
         },
       })),
     );
     setEdges(
-      topology.links.map((l) => ({
-        id: l.id,
-        source: l.entry_id,
-        target: l.exit_id,
-        label: l.method.replaceAll("_", " ").toUpperCase(),
-        type: "smoothstep",
-        animated: l.enabled,
-        style: {
-          stroke: l.enabled
-            ? l.method === "gre"
-              ? "#a78bfa"
-              : "#5cbfa4"
-            : "#60716c",
-          strokeWidth: 1.5,
-          opacity: l.enabled ? 1 : 0.45,
-        },
-        labelStyle: { fill: "var(--muted)", fontSize: 10, fontWeight: 600 },
-        labelBgStyle: { fill: "var(--canvas)" },
-        labelBgPadding: [8, 5],
-        labelBgBorderRadius: 5,
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#5cbfa4" },
-      })),
+      topology.links.map((l) => {
+        const status = linkDeploymentStatus(
+          l.id,
+          topology.revision,
+          topology.applied_revision,
+          jobs.data,
+        );
+        const failed = failedDeployment(status);
+        const color = !l.enabled
+          ? "#60716c"
+          : failed
+            ? "var(--danger)"
+            : status !== "succeeded"
+              ? "var(--muted)"
+              : l.method === "gre"
+                ? "#a78bfa"
+                : "#5cbfa4";
+        return {
+          id: l.id,
+          source: l.entry_id,
+          target: l.exit_id,
+          label:
+            l.method.replaceAll("_", " ").toUpperCase() +
+            (failed ? " · " + t("status." + status) : ""),
+          type: "smoothstep",
+          className: failed ? "deployment-failed" : "",
+          animated: l.enabled && !failed && status !== "queued",
+          style: {
+            stroke: color,
+            strokeWidth: failed ? 2.5 : 1.5,
+            opacity: l.enabled ? 1 : 0.45,
+          },
+          labelStyle: {
+            fill: failed ? "var(--danger)" : "var(--muted)",
+            fontSize: 10,
+            fontWeight: 600,
+          },
+          labelBgStyle: { fill: "var(--canvas)" },
+          labelBgPadding: [8, 5] as [number, number],
+          labelBgBorderRadius: 5,
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+        };
+      }),
     );
-  }, [topology, setNodes, setEdges]);
+  }, [topology, jobs.data, t, setNodes, setEdges]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);

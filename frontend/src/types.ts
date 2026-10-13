@@ -89,6 +89,15 @@ export interface MethodInfo {
   score?: number;
   caveat?: string;
   settings_schema?: SettingsSchema;
+  transports?: Record<
+    string,
+    {
+      architectures?: string[];
+      encrypted: boolean;
+      control_protocols: ("tcp" | "udp")[];
+      tls_mode: "none" | "verified_native" | "verified_bridge";
+    }
+  >;
 }
 export interface Job {
   id: string;
@@ -98,6 +107,10 @@ export interface Job {
   attempt: number;
   created: number;
   error_code: string | null;
+  error_message?: string | null;
+  cancel_requested?: number;
+  link_ids?: string[];
+  failure?: { server_id: string | null; code: string; detail: string } | null;
 }
 export interface Log {
   id: number;

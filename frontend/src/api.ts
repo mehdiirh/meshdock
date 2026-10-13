@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import i18n from "./i18n";
-import type { Topology } from "./types";
+import type { Topology, Job } from "./types";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 3000, refetchOnWindowFocus: true },
@@ -72,5 +72,13 @@ export function useSaveTopology() {
     onError: () => {
       void cache.invalidateQueries({ queryKey: ["topology"] });
     },
+  });
+}
+
+export function useJobs() {
+  return useQuery({
+    queryKey: ["jobs", i18n.language],
+    queryFn: () => api<Job[]>("/jobs"),
+    refetchInterval: 2500,
   });
 }

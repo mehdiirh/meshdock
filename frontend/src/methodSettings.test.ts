@@ -63,3 +63,22 @@ describe("adapter-provided settings", () => {
     expect(values.pool_count).toBe(0);
   });
 });
+
+it("validates every offered transport and clears options on QUIC switches", () => {
+  for (const method of methods) {
+    for (const transport of Object.keys(method.transports)) {
+      expect(settingsValid(schema(method.id), { transport })).toBe(true);
+    }
+  }
+  const next = updateSetting(
+    schema("frp_wss"),
+    { transport: "wss", tcp_mux: false, pool_count: 12 },
+    "transport",
+    "quic",
+  );
+  expect(next).toEqual({ transport: "quic", pool_count: 12 });
+  expect(settingsValid(schema("frp_wss"), next)).toBe(true);
+  expect(
+    settingsValid(schema("frp_wss"), { transport: "quic", quic_keepalive: 30 }),
+  ).toBe(false);
+});

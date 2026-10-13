@@ -209,3 +209,138 @@ test("advanced settings support Persian, defaults, and conditional controls", as
     path: test.info().outputPath("advanced-settings-persian.png"),
   });
 });
+
+test("secure transports update TLS and protocol requirements", async ({
+  page,
+}) => {
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
+  await page.getByRole("button", { name: "Backhaul", exact: true }).click();
+  await page.getByRole("button", { name: "wssmux", exact: true }).click();
+  await expect(page.getByTestId("transport-tls")).toContainText(
+    "verifies the peer certificate",
+  );
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "wss", exact: true }).click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "tcp", exact: true }).click();
+  await expect(page.getByTestId("transport-tls")).toHaveCount(0);
+  await page.getByRole("button", { name: "FRP", exact: true }).click();
+  await page.getByRole("button", { name: "quic", exact: true }).click();
+  await expect(page.getByText(/checks both TCP and UDP/)).toBeVisible();
+  await page
+    .getByRole("spinbutton", { name: "QUIC keepalive", exact: true })
+    .fill("30");
+  const save = page.getByRole("button", { name: "Save & deploy", exact: true });
+  await expect(save).toBeDisabled();
+  await page
+    .getByRole("spinbutton", { name: "QUIC keepalive", exact: true })
+    .fill("15");
+  await expect(save).toBeEnabled();
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await save.click();
+  expect((await saved).postDataJSON().links[0].settings).toEqual({
+    transport: "quic",
+    quic_keepalive: 15,
+  });
+});
+
+test("failed connections are red and collapsed footer keeps the newest revision", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/topology", (route) =>
+    route.fulfill({ json: { ...topology, revision: 2 } }),
+  );
+  await page.route("**/api/v1/jobs", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "new",
+          revision: 2,
+          status: "failed",
+          attempt: 3,
+          created: 2,
+          link_ids: [edge],
+          error_code: "ssh_auth",
+          error_message:
+            "Root SSH authentication failed. Check the saved credential.",
+          failure: { server_id: a, code: "ssh_auth", detail: "" },
+        },
+        {
+          id: "old",
+          revision: 1,
+          status: "succeeded",
+          attempt: 1,
+          created: 1,
+          link_ids: [edge],
+        },
+      ],
+    }),
+  );
+  await page.reload();
+  await expect(page.locator(".react-flow__edge.deployment-failed")).toHaveCount(
+    1,
+  );
+  const bar = page.locator(".jobs-bar");
+  await expect(bar).toContainText("r2");
+  await bar.click();
+  await expect(page.locator(".deployment-error")).toContainText(
+    "Root SSH authentication failed",
+  );
+  await page
+    .locator(".job-list button")
+    .filter({ hasText: "Revision 1" })
+    .click();
+  await expect(bar).toContainText("r1");
+  await bar.click();
+  await expect(bar).toContainText("r2");
+  await expect(bar.locator(".status-dot.failed")).toHaveCount(1);
+  await page.screenshot({
+    path: test.info().outputPath("failed-deployment.png"),
+  });
+});
+
+test("cancellation stays visible until rollback completes", async ({
+  page,
+}) => {
+  let requested = 0;
+  await page.route("**/api/v1/jobs", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "active",
+          revision: 2,
+          status: "running",
+          attempt: 1,
+          created: 2,
+          link_ids: [edge],
+          cancel_requested: requested,
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/v1/jobs/active/cancel", (route) => {
+    requested++;
+    return route.fulfill({ status: 202, json: { job_id: "active" } });
+  });
+  await page.reload();
+  await page.locator(".jobs-bar").click();
+  await page
+    .getByRole("button", { name: "Cancel & roll back", exact: true })
+    .click();
+  await expect(page.locator(".deployment-notice")).toContainText(
+    "Waiting for the current server operation",
+  );
+  await expect(
+    page.getByRole("button", { name: "Cancel & roll back", exact: true }),
+  ).toHaveCount(0);
+  await page.locator(".jobs-bar").click();
+  await expect(page.locator(".jobs-bar")).toContainText("Cancelling safely");
+  expect(requested).toBe(1);
+});

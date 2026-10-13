@@ -1,11 +1,16 @@
 [
   {
     "id": "frp_wss",
-    "name": "FRP \u00b7 WSS",
+    "name": "FRP",
     "encrypted": true,
     "direction": "exit-to-entry",
-    "protocols": ["tcp"],
-    "requirements": ["outbound-tcp", "pinned-private-tls"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "outbound-tcp",
+      "pinned-private-tls"
+    ],
     "priority": 1,
     "score": 3.65,
     "caveat": "private_tls",
@@ -18,17 +23,84 @@
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
       "properties": {
+        "transport": {
+          "default": "wss",
+          "enum": [
+            "tcp",
+            "kcp",
+            "quic",
+            "websocket",
+            "wss"
+          ],
+          "scope": "both",
+          "title": "Transport",
+          "type": "string"
+        },
         "tcp_mux": {
           "default": true,
           "scope": "both",
           "title": "Tcp Mux",
-          "type": "boolean"
+          "type": "boolean",
+          "when": {
+            "transport": [
+              "tcp",
+              "kcp",
+              "websocket",
+              "wss"
+            ]
+          }
+        },
+        "quic_keepalive": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Quic Keepalive",
+          "type": "integer",
+          "unit": "seconds",
+          "when": {
+            "transport": [
+              "quic"
+            ]
+          }
+        },
+        "quic_idle_timeout": {
+          "default": 30,
+          "maximum": 3600,
+          "minimum": 2,
+          "scope": "both",
+          "title": "Quic Idle Timeout",
+          "type": "integer",
+          "unit": "seconds",
+          "when": {
+            "transport": [
+              "quic"
+            ]
+          }
+        },
+        "quic_max_streams": {
+          "default": 100000,
+          "maximum": 1000000,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Quic Max Streams",
+          "type": "integer",
+          "when": {
+            "transport": [
+              "quic"
+            ]
+          }
         },
         "tcp_mux_keepalive": {
           "default": 30,
@@ -39,7 +111,15 @@
           "type": "integer",
           "unit": "seconds",
           "when": {
-            "tcp_mux": [true]
+            "tcp_mux": [
+              true
+            ],
+            "transport": [
+              "tcp",
+              "kcp",
+              "websocket",
+              "wss"
+            ]
           }
         },
         "pool_count": {
@@ -85,9 +165,58 @@
           "left": "heartbeat_interval",
           "operator": "lt",
           "right": "heartbeat_timeout"
+        },
+        {
+          "left": "quic_keepalive",
+          "operator": "lt",
+          "right": "quic_idle_timeout",
+          "when": {
+            "transport": [
+              "quic"
+            ]
+          }
         }
       ],
       "version": 1
+    },
+    "transports": {
+      "tcp": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_native"
+      },
+      "kcp": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp",
+          "udp"
+        ],
+        "tls_mode": "verified_native"
+      },
+      "quic": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp",
+          "udp"
+        ],
+        "tls_mode": "verified_native"
+      },
+      "websocket": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_native"
+      },
+      "wss": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_native"
+      }
     }
   },
   {
@@ -95,8 +224,13 @@
     "name": "Hysteria 2",
     "encrypted": true,
     "direction": "entry-to-exit",
-    "protocols": ["tcp"],
-    "requirements": ["outbound-udp", "pinned-private-tls"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "outbound-udp",
+      "pinned-private-tls"
+    ],
     "priority": 2,
     "score": 3.55,
     "caveat": "udp_required",
@@ -109,8 +243,13 @@
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
@@ -179,15 +318,21 @@
         }
       ],
       "version": 1
-    }
+    },
+    "transports": {}
   },
   {
     "id": "gre",
     "name": "GRE",
     "encrypted": false,
     "direction": "entry-to-exit",
-    "protocols": ["tcp"],
-    "requirements": ["protocol-47", "public-ipv4"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "protocol-47",
+      "public-ipv4"
+    ],
     "control_protocol": null,
     "mapping": {
       "ranges": true,
@@ -197,8 +342,13 @@
       "max_listener_ports": 65535,
       "capacity_basis": "kernel",
       "forwards_per_session": null,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
@@ -233,15 +383,20 @@
       "type": "object",
       "rules": [],
       "version": 1
-    }
+    },
+    "transports": {}
   },
   {
     "id": "backhaul",
     "name": "Backhaul",
     "encrypted": false,
     "direction": "exit-to-entry",
-    "protocols": ["tcp"],
-    "requirements": ["outbound-tcp"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "outbound-tcp"
+    ],
     "control_protocol": "tcp",
     "mapping": {
       "ranges": true,
@@ -251,15 +406,27 @@
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
       "properties": {
         "transport": {
           "default": "tcp",
-          "enum": ["tcp", "tcpmux", "ws", "wsmux"],
+          "enum": [
+            "tcp",
+            "tcpmux",
+            "ws",
+            "wss",
+            "wsmux",
+            "wssmux"
+          ],
           "scope": "both",
           "title": "Transport",
           "type": "string"
@@ -336,17 +503,28 @@
           "title": "Mux Con",
           "type": "integer",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         },
         "mux_version": {
           "default": 1,
-          "enum": [1, 2],
+          "enum": [
+            1,
+            2
+          ],
           "scope": "both",
           "title": "Mux Version",
           "type": "integer",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         },
         "mux_framesize": {
@@ -358,7 +536,11 @@
           "type": "integer",
           "unit": "bytes",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         },
         "mux_recievebuffer": {
@@ -370,7 +552,11 @@
           "type": "integer",
           "unit": "bytes",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         },
         "mux_streambuffer": {
@@ -382,7 +568,11 @@
           "type": "integer",
           "unit": "bytes",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         }
       },
@@ -394,11 +584,59 @@
           "operator": "lte",
           "right": "mux_recievebuffer",
           "when": {
-            "transport": ["tcpmux", "wsmux"]
+            "transport": [
+              "tcpmux",
+              "wsmux",
+              "wssmux"
+            ]
           }
         }
       ],
       "version": 1
+    },
+    "transports": {
+      "tcp": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none"
+      },
+      "tcpmux": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none"
+      },
+      "ws": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none"
+      },
+      "wss": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_bridge"
+      },
+      "wsmux": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none"
+      },
+      "wssmux": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_bridge"
+      }
     }
   },
   {
@@ -406,8 +644,12 @@
     "name": "Rathole",
     "encrypted": true,
     "direction": "exit-to-entry",
-    "protocols": ["tcp"],
-    "requirements": ["outbound-tcp"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "outbound-tcp"
+    ],
     "control_protocol": "tcp",
     "mapping": {
       "ranges": true,
@@ -417,12 +659,30 @@
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
       "properties": {
+        "transport": {
+          "default": "noise",
+          "enum": [
+            "tcp",
+            "noise",
+            "tls",
+            "ws",
+            "wss"
+          ],
+          "scope": "both",
+          "title": "Transport",
+          "type": "string"
+        },
         "nodelay": {
           "default": true,
           "scope": "both",
@@ -485,6 +745,61 @@
         }
       ],
       "version": 1
+    },
+    "transports": {
+      "tcp": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none",
+        "architectures": [
+          "x86_64",
+          "aarch64"
+        ]
+      },
+      "noise": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none",
+        "architectures": [
+          "x86_64",
+          "aarch64"
+        ]
+      },
+      "tls": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_bridge",
+        "architectures": [
+          "x86_64",
+          "aarch64"
+        ]
+      },
+      "ws": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "none",
+        "architectures": [
+          "x86_64"
+        ]
+      },
+      "wss": {
+        "encrypted": true,
+        "control_protocols": [
+          "tcp"
+        ],
+        "tls_mode": "verified_bridge",
+        "architectures": [
+          "x86_64"
+        ]
+      }
     }
   },
   {
@@ -492,8 +807,12 @@
     "name": "Reverse SSH",
     "encrypted": true,
     "direction": "exit-to-entry",
-    "protocols": ["tcp"],
-    "requirements": ["outbound-tcp"],
+    "protocols": [
+      "tcp"
+    ],
+    "requirements": [
+      "outbound-tcp"
+    ],
     "control_protocol": "tcp",
     "mapping": {
       "ranges": true,
@@ -503,8 +822,13 @@
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": 4096,
-      "protocols": ["tcp"],
-      "platforms": ["debian", "ubuntu"]
+      "protocols": [
+        "tcp"
+      ],
+      "platforms": [
+        "debian",
+        "ubuntu"
+      ]
     },
     "settings_schema": {
       "additionalProperties": false,
@@ -552,6 +876,7 @@
       "type": "object",
       "rules": [],
       "version": 1
-    }
+    },
+    "transports": {}
   }
 ]

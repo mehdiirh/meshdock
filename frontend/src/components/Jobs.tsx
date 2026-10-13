@@ -6,24 +6,22 @@ import {
   Clock3,
   RotateCcw,
   Activity,
+  Square,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
-import type { Job, Log, Server } from "../types";
+import { api, useJobs } from "../api";
+import type { Log, Server } from "../types";
+import { latestJob, jobStatus, failurePhase } from "../deployments";
 import { ErrorMessage } from "./Primitives";
 export function Jobs({ servers }: { servers: Server[] }) {
   const { t, i18n } = useTranslation();
   const cache = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string>();
-  const jobs = useQuery({
-    queryKey: ["jobs"],
-    queryFn: () => api<Job[]>("/jobs"),
-    refetchInterval: 2500,
-  });
-  const active = selected
-    ? jobs.data?.find((j) => j.id === selected)
-    : jobs.data?.[0];
+  const jobs = useJobs();
+  const latest = latestJob(jobs.data);
+  const active = jobs.data?.find((j) => j.id === selected) || latest;
+  const barJob = open ? active : latest;
   const logs = useQuery({
     queryKey: ["logs", active?.id, i18n.language],
     queryFn: async () => {
@@ -79,20 +77,28 @@ export function Jobs({ servers }: { servers: Server[] }) {
     mutationFn: (id: string) => api("/jobs/" + id + "/recover", "POST"),
     onSuccess: () => void cache.invalidateQueries({ queryKey: ["jobs"] }),
   });
+  const cancel = useMutation({
+    mutationFn: (id: string) => api("/jobs/" + id + "/cancel", "POST"),
+    onSuccess: () => void cache.invalidateQueries({ queryKey: ["jobs"] }),
+  });
   return (
     <section className={"jobs-drawer " + (open ? "expanded" : "")}>
-      <button className="jobs-bar" onClick={() => setOpen(!open)}>
+      <button
+        className="jobs-bar"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         <span>
           <Activity size={17} />
           <strong>{t("jobs")}</strong>
           <span className="count-badge">{jobs.data?.length || 0}</span>
         </span>
         <span>
-          {active ? (
+          {barJob ? (
             <>
-              <span className={"status-dot " + active.status} />
-              <span>{t("status." + active.status)}</span>
-              <span className="muted">r{active.revision}</span>
+              <span className={"status-dot " + jobStatus(barJob)} />
+              <span>{t("status." + jobStatus(barJob))}</span>
+              <span className="muted">r{barJob.revision}</span>
             </>
           ) : (
             <span className="muted">{t("noJobs")}</span>
@@ -109,12 +115,12 @@ export function Jobs({ servers }: { servers: Server[] }) {
                 className={active?.id === job.id ? "active" : ""}
                 onClick={() => setSelected(job.id)}
               >
-                <span className={"status-dot " + job.status} />
+                <span className={"status-dot " + jobStatus(job)} />
                 <span>
                   <strong>
                     {t("revision")} {job.revision}
                   </strong>
-                  <small>{t("status." + job.status)}</small>
+                  <small>{t("status." + jobStatus(job))}</small>
                 </span>
                 <time>
                   {new Date(job.created * 1000).toLocaleTimeString(
@@ -136,6 +142,19 @@ export function Jobs({ servers }: { servers: Server[] }) {
                   {t("attempt")} {active.attempt}
                 </span>
               )}
+              {active &&
+                ["queued", "retrying", "running"].includes(active.status) &&
+                !active.cancel_requested && (
+                  <button
+                    type="button"
+                    className="text-button danger-text"
+                    disabled={cancel.isPending}
+                    onClick={() => cancel.mutate(active.id)}
+                  >
+                    <Square size={14} />
+                    {t("deployment.cancel")}
+                  </button>
+                )}
               {active?.status === "recovery_required" && (
                 <button
                   className="text-button"
@@ -147,7 +166,41 @@ export function Jobs({ servers }: { servers: Server[] }) {
                 </button>
               )}
             </header>
-            <ErrorMessage error={jobs.error || logs.error || recover.error} />
+            <ErrorMessage
+              error={jobs.error || logs.error || recover.error || cancel.error}
+            />
+            {active?.cancel_requested &&
+            ["running", "recovering"].includes(active.status) ? (
+              <p className="deployment-notice" role="status">
+                {t("deployment.cancelling")}
+              </p>
+            ) : null}
+            {active?.error_message && (
+              <div className="deployment-error" role="alert">
+                <strong>{active.error_message}</strong>
+                {failurePhase(active.failure?.detail) && (
+                  <span>
+                    {t("deployment.phase")}:{" "}
+                    {t(
+                      "deployment.phases." +
+                        failurePhase(active.failure?.detail),
+                    )}
+                  </span>
+                )}
+                {active.failure?.server_id && (
+                  <span>
+                    {t("deployment.server")}:{" "}
+                    {servers.find((s) => s.id === active.failure?.server_id)
+                      ?.name || active.failure.server_id}
+                  </span>
+                )}
+                <small>
+                  {t("deployment.outcome." + active.status, {
+                    defaultValue: t("deployment.inspect"),
+                  })}
+                </small>
+              </div>
+            )}
             <div className="log-lines" aria-live="polite">
               {logs.data?.map((log) => (
                 <div className={"log-line " + log.level} key={log.id}>

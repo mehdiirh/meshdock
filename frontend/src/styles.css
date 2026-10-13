@@ -1977,3 +1977,27 @@ fieldset.field legend {
     transition: none;
   }
 }
+
+.status-dot.cancelled {
+  background: var(--danger);
+}
+.status-dot.cancelling {
+  background: var(--warning, #d9a85d);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.deployment-error,
+.deployment-notice {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.8rem 1rem;
+  margin: 0.7rem 1rem;
+  border-inline-start: 3px solid var(--danger);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+.deployment-notice {
+  border-color: var(--muted);
+  color: var(--text);
+}

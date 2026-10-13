@@ -150,7 +150,9 @@
     "recovery_required": "Recovery needed",
     "succeeded": "Applied",
     "failed": "Failed · rolled back",
-    "superseded": "Superseded"
+    "superseded": "Superseded",
+    "cancelled": "Cancelled",
+    "cancelling": "Cancelling safely"
   },
   "caveats": {
     "private_tls": "Pinned private TLS; this is not browser camouflage.",
@@ -221,11 +223,11 @@
       "bytes": "bytes"
     },
     "methods": {
-      "backhaul": "Choose TCP or WebSocket, with optional multiplexing. These modes are unencrypted. Mux controls appear only for mux transports.",
+      "backhaul": "TCP, TCPMUX, WS, WSS, WSMUX and WSSMUX. TLS modes use a per-link certificate and a verifying client bridge. Multiplexing controls appear only for mux transports.",
       "gre": "Adjust packet size and IP headers on both GRE interfaces. MTU must also fit your network path; a lower value can help avoid fragmentation.",
-      "rathole": "Tune TCP behavior and connection recovery. Noise encryption and managed keys remain enabled.",
+      "rathole": "Choose TCP, Noise, TLS, WS or WSS. Noise pins the server key. TLS and WSS use managed, verifying TLS bridges; TCP and WS do not encrypt traffic.",
       "reverse_ssh": "Tune the managed SSH client. Host verification stays enabled; your management SSH daemon is not changed.",
-      "frp_wss": "Tune pooling, multiplexing, and heartbeat behavior. Transport remains WSS with verified, managed TLS.",
+      "frp_wss": "Choose TCP, KCP, QUIC, WebSocket or WSS. Every option verifies the managed TLS certificate. WebSocket carries TLS inside WebSocket; WSS carries WebSocket inside TLS.",
       "hysteria2": "Tune QUIC receive windows, timers, and optional Salamander obfuscation. TLS verification stays enabled. Larger buffers consume more memory."
     },
     "fields": {
@@ -262,7 +264,35 @@
       "stream_receive_window": "Stream receive window",
       "connection_receive_window": "Connection receive window",
       "max_idle_timeout": "Maximum idle time",
-      "disable_path_mtu_discovery": "Disable path MTU discovery"
+      "disable_path_mtu_discovery": "Disable path MTU discovery",
+      "quic_keepalive": "QUIC keepalive",
+      "quic_idle_timeout": "QUIC idle timeout",
+      "quic_max_streams": "QUIC maximum incoming streams"
+    },
+    "tls": {
+      "verified_native": "TLS certificate and server name are verified against this link’s managed identity. No domain or certificate upload is required.",
+      "verified_bridge": "MeshDock installs an owned TLS bridge that verifies the peer certificate and server name. Plaintext stays on loopback; TLS protects the connection between servers."
+    },
+    "dualProtocol": "This transport also opens a TCP control listener. MeshDock checks both TCP and UDP on this port and restricts access to the peer server.",
+    "architectureLimit": "The pinned upstream binary supports this transport on {{architectures}} only. Unsupported servers are rejected before changes are applied."
+  },
+  "deployment": {
+    "cancel": "Cancel & roll back",
+    "cancelling": "Cancellation requested. Waiting for the current server operation, then restoring the previous configuration. Do not shut down the worker.",
+    "server": "Server",
+    "inspect": "Review the server and the last failed step below.",
+    "outcome": {
+      "failed": "This revision was not deployed. Previous managed configurations were restored. Edit the connection and deploy again.",
+      "retrying": "This attempt failed and was rolled back. MeshDock will retry automatically; you can cancel the retry.",
+      "recovery_required": "Rollback could not be confirmed on every server. Restore management access, then select Recover. New deployments remain blocked.",
+      "cancelled": "Deployment stopped. Activated changes were rolled back; saved connections remain available to edit or remove."
+    },
+    "phase": "Failed step",
+    "phases": {
+      "preparing": "Preparing server",
+      "applying": "Activating configuration",
+      "checking": "Checking health",
+      "committing": "Confirming deployment"
     }
   }
 }

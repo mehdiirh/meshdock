@@ -1,5 +1,6 @@
 import type {
   MethodSettings,
+  MethodInfo,
   SettingCondition,
   SettingsSchema,
   SettingValue,
@@ -71,5 +72,23 @@ export function settingsValid(
       (rule.operator === "lt"
         ? Number(effective[rule.left]) < Number(effective[rule.right])
         : Number(effective[rule.left]) <= Number(effective[rule.right])),
+  );
+}
+
+export function transportDetails(
+  method: MethodInfo | undefined,
+  settings: MethodSettings = {},
+) {
+  const selected = method?.settings_schema
+    ? effectiveSettings(method.settings_schema, settings).transport
+    : undefined;
+  return (
+    method?.transports?.[String(selected)] || {
+      encrypted: method?.encrypted ?? false,
+      control_protocols: method?.control_protocol
+        ? [method.control_protocol]
+        : [],
+      tls_mode: "none" as const,
+    }
   );
 }
