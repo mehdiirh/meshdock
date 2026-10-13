@@ -1,97 +1,249 @@
+<div align="center">
+
 # MeshDock
 
-A self-hosted visual control plane for server-to-server TCP tunnels. Arrange servers on a canvas, connect their handles, choose a transport, and follow each deployment in a persistent event stream.
+### Your network. Every connection.
 
-**FastAPI · SQLAlchemy 2 · Alembic · SQLite · React · TanStack Query · React Flow · react-i18next · uv · Docker Compose**
+A self-hosted workspace for building and managing server-to-server tunnels.
+Draw connections, choose a transport, and follow deployments from one visual dashboard.
 
-English and Persian, RTL, light and dark themes. No production infrastructure is included. MIT licensed.
+**6 tunnel methods · English & فارسی · Light & dark mode · MIT licensed**
 
-![Interactive demo topology](docs/screenshots/dashboard.png)
+[Quick start](#quick-start) · [Screenshots](#screenshots) · [Your first tunnel](#your-first-tunnel) · [Deploy](#deploy-with-https) · [Documentation](#documentation)
 
-MeshDock preserves earlier installation identifiers: `TM_*` configuration,
-`tm-*` managed resources, `/var/lib/tunnel-manager` remote state, and the
-`tunnel-manager` Compose project name. These are compatibility identifiers;
-existing databases, encryption keys, volumes and deployed tunnels stay in place.
+</div>
 
-## Run an isolated demo
+![MeshDock in dark mode with six fictional servers connected across a visual topology](docs/screenshots/dashboard.png)
+
+MeshDock brings your server inventory, tunnel configuration, SSH credentials, and deployment history into one place. Use it to connect multiple entry servers to multiple destination servers, change transports, and manage port mappings without maintaining each configuration by hand.
+
+> **Project status:** MeshDock is under active development. It has automated application and isolated network tests, but has not been deployed in production or validated against live filtering conditions. Try the demo first, then test on disposable servers before relying on it.
+
+## What you can do
+
+- **Build your topology visually.** Drag server cards, connect their handles, reconnect lines, or select several servers to create connections in a batch.
+- **Switch tunnel methods.** Choose GRE, Backhaul, Rathole, reverse SSH, FRP WSS, or Hysteria 2. Mappings are validated when you change methods.
+- **Forward individual ports or ranges.** Use ranges such as `1023-65535` with explicit exceptions. MeshDock checks management ports, transport listeners, overlapping mappings, and live server conflicts.
+- **Reuse SSH credentials.** Store root passwords or private keys in an encrypted vault, then use them across servers. Verify and pin each server's SSH fingerprint.
+- **Follow deployments.** See persisted deployment events, retry failures, and recover the previous configuration when activation fails.
+- **Automate through the API.** Administrators sign in with a username and password; integrations use scoped Bearer API keys.
+- **Work in your language and theme.** English and Persian, full RTL layout, and light and dark appearances are included.
+
+## Quick start
+
+### Try the demo with Docker
+
+You need **Docker with Compose v2** and **Python 3** for the configuration generator. Download or clone this repository, open a terminal in its root directory, then run:
 
 ```sh
 python3 scripts/setup.py --demo
-docker compose up --build -d
+docker compose -p meshdock-demo up --build -d
 ```
 
-Open `http://localhost:8080`. The username is `admin`; read the generated password in the owner-only `.env` file. Select “Explore a sample network” to load TEST-NET addresses. Simulation mode never opens SSH connections or changes servers. Do not turn a demo database into a production inventory; start production with a separate data volume.
+1. Open **[localhost:8080](http://localhost:8080)** on the machine running Docker.
+2. Sign in as **`admin`**. Find your generated password in `.env`, under `MESHDOCK_ADMIN_PASSWORD`.
+3. Choose **Explore a sample network**, then try moving servers, connecting them, and changing methods.
+
+**Demo mode simulates deployments. It never opens SSH connections or changes your servers.** The `.env` generator creates a unique password and refuses to overwrite existing configuration.
+
+Stop the demo while retaining its data:
+
+```sh
+docker compose -p meshdock-demo down
+```
+
+The `meshdock-demo` project name gives the demo its own Docker volumes. Keep using that name for its lifecycle commands. To deploy a real instance later, use a fresh checkout, new configuration, and a separate data volume; do not switch a demo database into production mode.
+
+<details>
+<summary>Running the demo on a remote machine?</summary>
+
+The demo web port is bound to loopback. Forward it over SSH from your computer:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 user@controller.example.com
+```
+
+Replace the example host and username, then open [localhost:8080](http://localhost:8080) on your computer. For regular remote access, use the HTTPS deployment below.
+
+</details>
+
+### Run locally for development
+
+You need **Python 3.12+, uv, Node.js 22+, and npm**.
+
+```sh
+./scripts/dev.sh
+```
+
+Open **[127.0.0.1:5177](http://127.0.0.1:5177)**. The API runs at `http://127.0.0.1:8017`. The launcher installs dependencies and generates `.env` if needed; use its generated admin password to sign in.
+
+The launcher **always defaults to demo mode**, even if `.env` or your shell sets `MESHDOCK_DEMO=false`. Real server changes require the explicit flag:
+
+```sh
+./scripts/dev.sh --prod
+```
+
+`--prod` enables real deployments while running the local development servers. Use Docker for hosting the service. Stop the current launcher before changing modes. Demo and real mode keep separate databases and encryption keys in `.data/demo` and `.data/prod`; the launcher sets these locations itself.
+
+## Screenshots
+
+These are captures of the actual UI using fictional servers and reserved documentation addresses. No production hosts, credentials, or personal data appear in them. Click an image to inspect the full-size version.
+
+| Light appearance | Persian and RTL |
+| --- | --- |
+| [![MeshDock light-mode topology with six sample servers](docs/screenshots/dashboard-light.png)](docs/screenshots/dashboard-light.png) | [![MeshDock Persian interface with right-to-left layout](docs/screenshots/dashboard-persian.png)](docs/screenshots/dashboard-persian.png) |
+
+<details>
+<summary><strong>Explore the connection editor: methods, port ranges, and exceptions</strong></summary>
+
+Select a connection to choose its tunnel method and map ports. Here, `1023-65535` excludes `2222` and `8080-8081`, leaving 64,510 mapped TCP ports.
+
+![GRE connection editor with a full port range and explicit exceptions](docs/screenshots/port-ranges.png)
+
+Switching to a socket-based transport retains the mapping and displays its resource requirements. Accepting a range does not guarantee that a particular server has enough capacity to run it.
+
+![Rathole connection editor showing port count and server capacity guidance](docs/screenshots/port-capacity.png)
+
+</details>
+
+## Your first tunnel
+
+There are three roles to understand:
+
+| Role | What it does |
+| --- | --- |
+| **Controller** | Runs MeshDock and uses SSH to configure your servers. |
+| **Entry server** | Accepts your users' application connections. |
+| **Exit server** | Reaches the destination service, such as an existing proxy or web service. |
+
+For example, users can connect to an entry server in Iran while an exit server in Turkey forwards those connections to your existing service. MeshDock manages the tunnel infrastructure; your destination application must already be installed and running.
+
+1. **Save a credential.** Open **SSH vault** and add a root password or SSH private key. Private keys may have a passphrase and can be reused.
+2. **Add your servers.** Choose **Add server**, set the entry/exit role, and select a saved credential. The SSH management address can differ from the public transport address. Compare the discovered fingerprint against your provider console or another trusted source before accepting it.
+3. **Connect them.** Draw a line from an entry's right-hand handle to an exit's left-hand handle. Choose a method and set the entry port, destination port, and destination host. For a service running on the exit server, the destination host is usually `127.0.0.1`.
+4. **Save and follow the deployment.** **Save & deploy** queues the change. MeshDock installs required tunnel packages, writes its managed configuration, starts services, and runs health checks. Open **Deployments** to follow progress.
+5. **Test the actual application.** Connect a client through the entry server and verify traffic. An applied revision confirms deployment checks passed; it is not a continuous uptime or speed measurement.
+
+Click a line to edit or switch its method. Drag an endpoint to change its destination. Hold **Shift** to select servers, then choose **Connect selected** for batch connections. Moving a card changes only the layout and does not deploy anything.
+
+### Port ranges and multiple destinations
+
+Map a single port (`443 → 8443`) or equal-width ranges (`8000-8099 → 9000-9099`). Exceptions refer to **entry ports** and preserve each remaining port's destination offset.
+
+There is no blanket reserved port band. Exclude your actual conflicting management or service ports, or choose a different transport control port. GRE ranges use kernel forwarding. Other methods create listeners and are subject to descriptor limits, available ports, memory, and connection capacity.
+
+For socket-based connections, a shared entry port can distribute traffic across several exits using **Round robin**, **Fewest connections**, or **Failover**. Native GRE ranges require exclusive entry intervals. See [port mapping behavior and limits](docs/PORT-MAPPINGS.md) before using broad ranges or shared ports.
+
+## Supported tunnel methods
+
+All current adapters forward **TCP application traffic**. The transport itself may use a different protocol.
+
+| Method | Transport | Encryption | Main requirement |
+| --- | --- | --- | --- |
+| **GRE** | IP protocol 47 | No | GRE must be permitted between public IPv4 endpoints; supports compact kernel forwarding for ranges. |
+| **Backhaul** | TCP | No | Exit can initiate TCP connections to entry; use application-level encryption. |
+| **Rathole** | TCP with Noise | Yes | Exit can initiate TCP connections to entry. |
+| **Reverse SSH** | SSH over TCP | Yes | Exit can reach the managed SSH listener on entry. |
+| **FRP WSS** | WebSocket over TLS | Yes | Exit can reach entry over TCP; MeshDock uses pinned private TLS. |
+| **Hysteria 2** | QUIC over UDP, with Salamander | Yes | Entry can reach exit over UDP. |
+
+Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No method guarantees connectivity through every provider firewall or filtering system.
 
 ## Deploy with HTTPS
 
-Point a domain at the control-plane server, then on a fresh checkout:
+### Before you start
+
+- **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443** for Caddy.
+- **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller, and public IPv4 transport addresses.
+- **Network:** Provider firewalls must permit the selected transport. Management SSH must be reachable from the controller even if it is blocked between tunnel peers.
+- **Destination:** Your proxy, web server, or other TCP application is already running at the destination host and port.
+
+On a **fresh checkout with no `.env`**, replace the example domain and run:
 
 ```sh
 python3 scripts/setup.py --origin https://meshdock.example.com
 docker compose --profile tls up --build -d
 ```
 
-Replace the example domain with your domain. Caddy obtains the certificate; ports 80 and 443 must reach the controller. The web service is also bound to loopback port 8080 for use behind your own reverse proxy. The API and worker are not published directly. Secure cookies are the default. Use one API service and one worker per SQLite database, on a local volume rather than NFS.
+Open your domain and sign in using the generated credentials in `.env`. Omitting `--demo` enables real deployments. Caddy obtains the TLS certificate; API and worker are not published directly. The web service also listens on controller loopback at port 8080 for use behind your own reverse proxy.
 
-The initial password is only used to create the first administrator. Changing `.env` later does not reset an existing account. Use the account screen to change its password. Back up the data volume and master encryption key before upgrades. Never commit `.env`, keys, database files, screenshots containing real infrastructure, or logs.
+Keep **one API and one worker per SQLite database**, on a local Docker volume rather than NFS. Start with disposable servers and follow the [staging checklist](docs/OPERATIONS.md#first-staging-deployment).
 
-## Manage a network
+### Configuration
 
-1. Store a root password or SSH private key in the vault. Keys may include a passphrase and be reused by several servers.
-2. Add entry and exit servers. The management host can differ from the public transport IPv4 address. Discover and independently verify the SSH host fingerprint.
-3. Drag a line from an entry's right handle to an exit's left handle. Configure public and destination ports, select a method, optionally select a free transport port such as 443, and save. Deployment is queued immediately.
-4. Socket-based connections using the same entry port form a shared HAProxy pool; native GRE ranges require exclusive intervals. Choose round robin, least connections, or ordered failover. Shift-select several entries and exits, then use “Connect selected” for a many-to-many batch.
-5. Click an edge to switch methods, or drag its endpoint to another server. Edit a server to replace its host. The old host stays in the reconciliation plan until its managed resources are removed.
-6. Open Deployments for persisted, live events. A failed update restores the preceding generation where hosts are reachable. Recovery-required state blocks further changes until rollback can finish.
+Use the generator for a unique password. [sample.env](sample.env) documents manual configuration; `.env.example` contains the same template. Replace its placeholder password if configuring manually.
 
-Port mappings accept equal-width ranges and explicit exceptions. Limits and conflict checks depend on the selected adapter; see [Port mappings](docs/PORT-MAPPINGS.md).
+| Variable | Purpose |
+| --- | --- |
+| `MESHDOCK_ADMIN_USERNAME` | Initial administrator username; defaults to `admin`. |
+| `MESHDOCK_ADMIN_PASSWORD` | Initial administrator password, at least 12 characters. |
+| `MESHDOCK_PUBLIC_ORIGIN` | The full browser-facing origin, such as `https://meshdock.example.com`. |
+| `MESHDOCK_DOMAIN` | Domain used by Caddy. |
+| `MESHDOCK_COOKIE_SECURE` | Set to `true` for HTTPS deployments. |
+| `MESHDOCK_DEMO` | `true` simulates deployments; `false` permits server changes. |
+| `MESHDOCK_PORT` | Local web port in Docker; defaults to `8080`. |
 
-Moving cards only saves layout; it does not deploy. A green revision means the last deployment passed checks, not continuous uptime certification. HAProxy checks continue to steer new connections away from unhealthy backends.
+The admin variables initialize a new database only. Change an existing password in **Access & activity**; editing `.env` does not reset it. Keep `.env`, private keys, database files, backups, and real infrastructure details out of Git.
 
-## Transports
+## Operations and recovery
 
-Implemented adapters: **GRE, Backhaul TCP, Rathole Noise, reverse SSH, FRP WSS, Hysteria 2 with Salamander**. See [transport research and scoring](docs/TRANSPORTS.md) for the evidence, priorities and limitations. No transport guarantees passage through every national or provider restriction.
+- **Watch the controller:** `docker compose logs --tail=100 -f api worker`. Use `-p meshdock-demo` when inspecting the isolated demo.
+- **Back up both data and key:** preserve `meshdock.sqlite3` **and its matching `master.key`**. The database alone cannot recover encrypted credentials. Follow the [backup and restore guide](docs/OPERATIONS.md#backup-and-restore).
+- **Upgrade deliberately:** back up, stop API and worker, and deploy the same release for both. Schema changes are tracked with Alembic and applied at startup. See [migrations](docs/MIGRATIONS.md).
+- **Recover failed changes:** MeshDock retries bounded failures and attempts to restore the preceding generation. If rollback cannot reach a host, restore SSH access and choose **Retry rollback** before deploying again.
+- **Remove managed resources:** **Clean up tunnels** disables links and removes owned services, interfaces, and firewall rules. Shared packages and recovery files remain; [full removal](docs/OPERATIONS.md#cleanup-and-full-removal) is a separate step.
 
-Current scope is Debian/Ubuntu with systemd, root SSH, IPv4 endpoints and TCP application mappings. Hysteria uses UDP underneath; GRE uses IP protocol 47. Destination services such as your proxy must already exist. Provider firewalls and NAT rules remain the operator's responsibility. The manager does not change existing Xray routing, Nginx configuration, SSH daemon configuration, or default routes.
+Changes spanning several hosts are not a single atomic transaction. Switching methods can interrupt active connections. MeshDock manages its own resources under `/var/lib/meshdock` and `meshdock-*` services; it does not rewrite existing Xray routing, Nginx configuration, SSH daemon settings, or default routes.
 
-## Deployment and recovery
+<details>
+<summary><strong>Common questions</strong></summary>
 
-The worker prepares owned generation directories, validates configuration, activates services, checks destinations, then records the applied revision. It has durable receipts, bounded retries, a renewable database lease and monotonic remote fencing epochs. A controller restart compensates an interrupted job before advancing the queue.
+**The setup command says configuration already exists.**
 
-Local file-pointer swaps are atomic. **Cross-host activation is not a distributed atomic transaction**, and switching methods can interrupt active TCP connections. A failed or unreachable rollback is visible and blocks new changes. Shared package installation is not undone on rollback. Never assume a tunnel is healthy solely because a process starts: current checks cover service state, TCP destination reachability for socket adapters, and inner GRE peer reachability for native ranges, not the end user's application protocol or an ISP-specific throughput benchmark.
+It intentionally preserves `.env`. Reuse it for the same instance. For a separate real deployment, use a fresh checkout and data volume instead of changing a demo instance's mode.
 
-“Clean up tunnels” disables connections and removes managed units, interfaces and firewall rules. Recent generation files remain for recovery; [operations documentation](docs/OPERATIONS.md) describes the explicit full-removal pipeline.
+**My tunnel is applied, but my application does not connect.**
 
-## Development
+Check the destination host/port and application first, then transport reachability and provider firewall rules. Review the deployment events. Health checks do not exercise every application protocol or mapped port.
 
-Requirements: Python 3.12+, uv, Node.js 22+, npm.
+**Can MeshDock manage multiple entry servers and exits?**
+
+Yes. Each connection is represented separately. Public listeners, transport ports, and pool policies still need to be compatible; the [mapping guide](docs/PORT-MAPPINGS.md) explains conflicts.
+
+**Does the dashboard manage VPN users or install my proxy application?**
+
+No. MeshDock manages server-to-server tunnels. Keep your destination application and client management in their existing tools.
+
+**What is supported today?**
+
+Linux targets with Debian/Ubuntu and systemd, IPv4 endpoints, and TCP application mappings. UDP application forwarding and IPv6 tunnel addressing are not currently implemented. Hysteria's UDP transport does not change that application-level limit.
+
+</details>
+
+## API access
+
+Create a key in **Access & activity**, copy it when it is shown, and send it in the `Authorization: Bearer` header. Read-only keys inspect topology and jobs; write keys also save layout; admin keys can change infrastructure. Never put API keys in URLs.
+
+After setting `MESHDOCK_URL` to your controller URL and `MESHDOCK_API_KEY` to your generated key:
 
 ```sh
-./scripts/dev.sh
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer ${MESHDOCK_API_KEY}" \
+  "${MESHDOCK_URL}/api/v1/topology"
 ```
 
-The frontend runs at `http://127.0.0.1:5177`, API at `http://127.0.0.1:8017`.
-The script **always runs in demo mode by default**, even if `.env` or your shell
-sets `TM_DEMO=false`. Only this explicit flag enables real server deployments:
+Routes are versioned under `/api/v1`. The OpenAPI schema is at `/api/openapi.json`. See [architecture and extension contracts](docs/ARCHITECTURE.md) before building an adapter or integration.
 
-```sh
-./scripts/dev.sh --prod
-```
+## Contributing
 
-`--prod` still runs the local development servers; use Docker for hosting the
-production service. Saving tunnel changes in this mode can modify your servers.
-Stop the current launcher before switching modes; both use the same local ports.
+MeshDock uses **FastAPI, SQLAlchemy 2, Alembic, and SQLite** in `backend/`, and **React, TanStack Query, React Flow, and i18next** in `frontend/`. Docker Compose runs the API, worker, web UI, and optional TLS proxy together.
 
-Demo data and encryption keys live in `.data/demo`; real mode uses `.data/prod`.
-The launcher overrides `TM_DATA_DIR` and `TM_MASTER_KEY_FILE` to keep these stores
-separate. Existing files directly in `.data` are preserved but are not loaded or
-automatically migrated. Never copy a demo database into the real store.
+Start with [AGENTS.md](AGENTS.md) for development conventions and [architecture](docs/ARCHITECTURE.md) for the adapter interface. Database changes require a new Alembic migration. UI strings belong in English/Persian JSON catalogs; backend messages use gettext `.po` files. Use fictional addresses and isolated fixtures for tests and screenshots.
 
-If `.env` is absent, the launcher generates it with a unique admin password and
-safe demo settings. Existing `.env` files are never overwritten. Read the generated
-`TM_ADMIN_PASSWORD` there to sign in. [sample.env](sample.env) documents the available
-settings and is also provided as `.env.example`; replace its placeholder password
-if configuring manually. Admin credentials only initialize a new database.
+<details>
+<summary><strong>Run the checks</strong></summary>
+
+From the repository root:
 
 ```sh
 uv sync --project backend --frozen
@@ -99,15 +251,26 @@ uv run --project backend --no-sync python backend/compile_locales.py
 (cd backend && uv run --no-sync pytest -q)
 uv run --project backend --no-sync black --config backend/pyproject.toml --check backend scripts
 uv run --project backend --no-sync ruff check --config backend/pyproject.toml backend scripts
-(cd frontend && npm ci && npm test && npm run build)
+(cd frontend && npm ci && npm run format:check && npm test && npm run build)
+(cd frontend && npx playwright install chromium && npm run test:e2e)
 ```
 
-Use [AGENTS.md](AGENTS.md), [architecture and adapter contracts](docs/ARCHITECTURE.md), [database migrations](docs/MIGRATIONS.md), and [open decisions](docs/DECISIONS.md) when extending the project. API routes are versioned under `/api/v1`; OpenAPI is at `/api/openapi.json`.
+Linux packet tests are opt-in and run in a disposable container with no external network. See [isolated network tests](docs/OPERATIONS.md#isolated-gre-packet-test). See [screenshot instructions](docs/screenshots/README.md) to refresh this gallery.
 
-## API access
+</details>
 
-Create a scoped API key in Access & activity. The plaintext is returned once. Send it in the `Authorization: Bearer` header. Read keys inspect topology, jobs and logs; write keys additionally save layout; admin keys manage infrastructure and credentials. Revocation applies to subsequent calls and active event streams. Browser sessions use HttpOnly cookies and CSRF protection.
+## Documentation
 
-## Validation status
+| Guide | What you will find |
+| --- | --- |
+| [Operations](docs/OPERATIONS.md) | Staging, ownership, logs, backup, recovery, and cleanup. |
+| [Port mappings](docs/PORT-MAPPINGS.md) | Ranges, exceptions, conflicts, pools, and resource limits. |
+| [Transports](docs/TRANSPORTS.md) | Method research, evidence, tradeoffs, and limitations. |
+| [Architecture](docs/ARCHITECTURE.md) | Backend boundaries, API contracts, and adding adapters. |
+| [Migrations](docs/MIGRATIONS.md) | Versioned database changes and upgrade guidance. |
+| [Verification](docs/VERIFICATION.md) | What has been tested and what remains unverified. |
+| [Decisions](docs/DECISIONS.md) | Current scope and open design questions. |
 
-This project includes migration, authentication, planner, rollback, recovery, fencing, localization and UI regression tests, plus opt-in real-binary loopback smoke tests. It has **not been validated against production hosts or live filtering conditions**. Linux systemd/firewall behavior needs an isolated staging deployment before production use. Read the [verification record](docs/VERIFICATION.md) for exact test results and [operations](docs/OPERATIONS.md) for the staged rollout procedure.
+## License
+
+MeshDock is available under the [MIT License](LICENSE).

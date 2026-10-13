@@ -49,9 +49,20 @@ The test runner currently emits a Starlette deprecation warning about its httpx 
 ## MeshDock rename — 2026-10-13
 
 - Renamed UI branding in both locale catalogs, login/dashboard labels, browser title, API title, backend/frontend package metadata and lockfiles, image tags, CI examples, setup/backup/dev scripts, and project documentation.
-- Preserved persisted configuration/resource identities and exact package-policy ownership markers so existing installations retain their data and recovery/cleanup behavior. See DECISIONS.md.
+- Initially retained installation identifiers during the display-name change. The subsequent fresh-project rename below supersedes that decision.
 - Backend: 77 passed, 11 opt-in transport/Linux tests skipped. Black and Ruff passed.
 - Frontend: 10 unit tests passed; TypeScript/Vite production build and Prettier passed.
 - All 3 browser tests passed using installed Chrome in an isolated profile. The default Playwright browser was missing and its download returned a regional HTTP 403; a temporary configuration selected Chrome without changing the committed CI browser configuration.
 - Browser checks also verified MeshDock on the login screen and dashboard, English/dark and Persian/light layouts, and browser title. Refreshed documentation screenshots with mocked TEST-NET fixtures; no live server data was used.
 - `uv lock --check --offline`, Docker Compose configuration validation, shell syntax and Git whitespace checks passed. No production hosts were contacted or modified.
+
+## Fresh-project naming and public documentation — 2026-10-13
+
+The owner confirmed that there are no deployed installations. Configuration, cookies, API-key prefixes, browser storage, managed units, firewall chains, runtime paths, database filename, Docker project/volume names, and the container account now use MeshDock names, with no compatibility aliases. GRE interfaces use `md` to stay within Linux's 15-byte limit. Schema definitions and Alembic history are unchanged.
+
+- The final backend suite passed 78 tests, including the maximum-slot interface/chain-length check and API-key display-prefix check. Eleven platform/real-binary tests were skipped in the macOS suite.
+- Eight Linux network tests passed in a disposable privileged container with external networking disabled and no host mounts. These covered renamed GRE/firewall resources, packet forwarding, rollback/cleanup, full-range HAProxy validation, reverse-SSH forwarding and outgoing-port exhaustion.
+- The stock test-image build could not retrieve the pinned uv package from its package index. Linux tests used the existing offline test image plus current application/test sources and distro Python/pytest, with `--noconftest`. Its older Argon2 exception was aliased to the equivalent current name in the test process only; no application source was altered for this workaround. These results do not validate building the stock Docker images.
+- Ten frontend unit tests, TypeScript/Vite production build, and all three browser regressions passed. Browser tests used installed Chrome in an isolated profile. Black, Ruff, Prettier, shell syntax, and Compose configuration validation passed.
+- The gallery contains five actual UI captures made with fictional fixtures and RFC 5737 addresses: dark, light, Persian RTL, GRE ranges and socket capacity. The reproducible capture script checks branding, node count, language/theme state, mapping count and capacity guidance; it rejects unexpected requests and never contacts the backend or managed hosts.
+- All 33 local README/gallery links and section anchors resolve. Screenshots were inspected for readability and public-safe data. No production host was contacted or changed.
