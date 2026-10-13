@@ -135,3 +135,26 @@ Developer verification uses two temporary SSH servers bound only to loopback. It
 cd backend
 MESHDOCK_TEST_SSH_LOOPBACK=1 uv run python -m pytest -q tests/test_ssh_jump_loopback.py
 ```
+
+## Force-delete an unavailable server
+
+Use **Edit server → Force delete** when a machine has been permanently removed by its provider or normal deletion cannot reach it. A retained connection's removal inspector also offers force deletion for either endpoint, including a server already missing from the desired inventory.
+
+MeshDock checks authenticated SSH access to the selected server and its connected endpoints. Each reachable endpoint receives a plan with the selected server's connections removed; other applied connections on shared servers are preserved. If the selected server is reachable, MeshDock cleans it too. If only that server is unreachable, MeshDock completes the peer cleanup and then removes its inventory record and connections, with a permanent skipped-cleanup warning.
+
+If a peer is unreachable, including when both sides are offline, the operation pauses at **Cleanup needs attention**. Review the per-endpoint report and choose **Retry cleanup**, or explicitly confirm **Skip unreachable cleanup**. Skipping means accepting that remote tunnel services, interfaces and firewall rules may remain. A skip never means that those hosts were cleaned. SSH authentication/key-verification errors and remote command failures are not automatically treated as unreachable; fix them and retry. Command failures receive bounded automatic retries before requiring attention.
+
+Successful cleanup remains in place while another endpoint needs attention. A remote operation failure triggers rollback on that failed endpoint only, protecting its unrelated connections; an unsuccessful rollback remains recorded as uncertain until retried. Force deletion does not roll completed peers back into a connection to a deleted machine. The worker saves endpoint progress before remote changes and resumes the same generation after a restart. This workflow intentionally differs from an ordinary coordinated deployment: it has no global cancellation/rollback button. Closing the report only closes the window; progress and actions remain available in **Deployments**.
+
+Topology deployments are blocked until the force-delete operation completes or its remaining unavailable endpoints are explicitly skipped. Only a recovery-required job containing removal of the selected server's connections can be taken over; unrelated uncertain deployments still require recovery. Unrelated pending topology edits are not deployed by force deletion. The report and audit trail retain endpoint names and cleanup outcomes after the selected card disappears.
+
+Skipped cleanup records retain credential references and tunnel allocation slots conservatively, preventing silent reuse of potentially live resources. Shared packages and historical recovery material remain on cleaned hosts. If a skipped host returns, clean its old MeshDock resources before reusing it; this release does not automatically revisit acknowledged skipped hosts.
+
+Admin API calls (username/password session with CSRF, or an admin Bearer API key):
+
+- `POST /api/v1/servers/{id}/force-delete` with `{"revision": <current revision>}` starts the durable operation and returns its job ID.
+- `GET /api/v1/jobs` includes an allowlisted `force_delete` report: selected server, each endpoint's outcome, translated errors and whether skipping is available. Private manifests, secrets and receipts are never returned.
+- `POST /api/v1/jobs/{id}/retry-cleanup` retries unfinished endpoints.
+- `POST /api/v1/jobs/{id}/skip-cleanup` explicitly accepts the reported unreachable endpoints. Both action requests require the current revision; skipping is rejected unless every unfinished endpoint was checked and found unreachable.
+
+The operation uses the existing versioned job snapshot and receipt fields with force-deletion metadata version 1. No database schema change or new migration is required.
