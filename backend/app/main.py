@@ -38,7 +38,11 @@ def language(request):
 @app.exception_handler(AppError)
 async def app_error(request, exc):
     return JSONResponse(
-        {"code": exc.code, "message": translate(exc.code, language(request))},
+        {
+            "code": exc.code,
+            "message": translate(exc.code, language(request)),
+            "details": exc.details,
+        },
         status_code=exc.status,
     )
 

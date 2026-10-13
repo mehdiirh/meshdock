@@ -16,6 +16,7 @@ import pytest
 from app.methods import REGISTRY
 from app.methods.base import Context
 from app.planner import empty
+from app.ports import expand
 from app.topology import material
 
 
@@ -74,12 +75,39 @@ class Echo(socketserver.BaseRequestHandler):
 def test_round_trip_over_actual_transport(tmp_path, method, binaries):
     if any(not (Path(BINARIES) / name).exists() for name in binaries):
         pytest.skip("Required test binary absent")
-    echo = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Echo)
-    threading.Thread(target=echo.serve_forever, daemon=True).start()
+    for _ in range(30):
+        echo = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Echo)
+        first = echo.server_address[1]
+        try:
+            if first > 65533:
+                raise OSError("Port range exceeds TCP space")
+            second = socketserver.ThreadingTCPServer(("127.0.0.1", first + 2), Echo)
+            break
+        except OSError:
+            echo.server_close()
+    else:
+        pytest.fail("No adjacent test ports available")
+    for server in (echo, second):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    with socket.socket() as control:
+        control.bind(("127.0.0.1", 0))
+        control_port = control.getsockname()[1]
     link = {
         "id": "a" * 32,
         "slot": 987,
-        "ports": [{"public": 443, "host": "127.0.0.1", "target": echo.server_address[1]}],
+        "ports": expand(
+            [
+                {
+                    "public": "443-445",
+                    "target": f"{first}-{first + 2}",
+                    "exclude": [444],
+                    "host": "127.0.0.1",
+                }
+            ]
+        ),
+        "allocated_control": control_port,
+        "internal_ports": [48021, 48023],
+        "auxiliary_ports": [48025],
         "policy": "roundrobin",
         "weight": 1,
     }
@@ -101,7 +129,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
                 relay = TLSRelay(("127.0.0.1", context.control), RelayHandler)
                 relay.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 relay.tls.load_cert_chain(folder / (context.filename + "-tls.pem"))
-                relay.target = ("127.0.0.1", 22000 + link["slot"])
+                relay.target = ("127.0.0.1", context.auxiliary(0))
                 threading.Thread(target=relay.serve_forever, daemon=True).start()
             config = folder / (context.filename + (".json" if method == "hysteria2" else ".toml"))
             command = [str(Path(BINARIES) / binary)]
@@ -114,13 +142,15 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             try:
-                with socket.create_connection(
-                    ("127.0.0.1", context.internal(0)), timeout=1
-                ) as client:
-                    client.settimeout(2)
-                    client.sendall(b"tunnel-manager-roundtrip")
-                    if client.recv(128) == b"tunnel-manager-roundtrip":
-                        break
+                for index in range(2):
+                    with socket.create_connection(
+                        ("127.0.0.1", context.internal(index)), timeout=1
+                    ) as client:
+                        client.settimeout(2)
+                        client.sendall(b"tunnel-manager-roundtrip")
+                        if client.recv(128) != b"tunnel-manager-roundtrip":
+                            raise OSError("Unexpected payload")
+                break
             except OSError:
                 pass
             time.sleep(0.3)
@@ -147,5 +177,6 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
         if relay:
             relay.shutdown()
             relay.server_close()
-        echo.shutdown()
-        echo.server_close()
+        for server in (echo, second):
+            server.shutdown()
+            server.server_close()

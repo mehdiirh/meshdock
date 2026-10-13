@@ -134,3 +134,27 @@ msgstr "A newer worker owns this deployment."
 
 msgid "control_port_conflict"
 msgstr "The transport port conflicts with another listener on this server."
+
+msgid "mapping_limit"
+msgstr "This method cannot deploy this many mapped ports. Reduce the range or choose a method with native ranges."
+
+msgid "ssh_port_conflict"
+msgstr "The mapping includes the entry server’s SSH port. Add it to the explicit exceptions."
+
+msgid "range_pool_conflict"
+msgstr "A native GRE range overlaps another connection on this entry. Use disjoint ranges or explicit exceptions."
+
+msgid "port_capacity"
+msgstr "No free transport listener allocation remains on this server."
+
+msgid "public_address_missing"
+msgstr "The configured public IPv4 must be assigned to a local interface on this server."
+
+msgid "range_kernel_unsupported"
+msgstr "Shifted GRE port ranges require Linux kernel 4.18 or newer."
+
+msgid "listener_conflict"
+msgstr "An existing service occupies a required listener. Add an exception or change the mapping/control port. Conflict details follow."
+
+msgid "range_target_conflict"
+msgstr "GRE target ranges overlap for different destination hosts on the same connection."

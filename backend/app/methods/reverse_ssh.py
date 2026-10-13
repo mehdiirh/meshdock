@@ -2,6 +2,9 @@ from .base import Adapter, service
 
 
 class ReverseSSH(Adapter):
+    # Keep authorized_keys lines and OpenSSH forwarding options comfortably bounded.
+    max_expanded_ports = 64
+
     metadata = {
         "id": "reverse_ssh",
         "name": "Reverse SSH",
@@ -22,7 +25,7 @@ class ReverseSSH(Adapter):
             "restrict,port-forwarding," + options + " " + context.secrets["client_public"] + "\n"
         )
         entry["files"][name + "-sshd.conf"] = f"""Port {context.control}
-ListenAddress 0.0.0.0
+ListenAddress {context.entry["address"]}
 HostKey {context.root}/{name}-host
 PidFile /run/{context.tag}.pid
 AuthorizedKeysFile {context.root}/{name}-authorized
@@ -60,6 +63,7 @@ LogLevel ERROR
                 "protocol": "tcp",
                 "source": context.exit["address"],
                 "port": context.control,
+                "destination": context.entry["address"],
             }
         )
         entry["listeners"].append(context.control)

@@ -56,7 +56,7 @@ def test_cycles_conflicting_pools_and_credentials_in_use(admin):
     value["links"][1]["policy"] = "leastconn"
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 400
     value["links"][1]["policy"] = "roundrobin"
-    value["links"][0]["ports"][0]["public"] = 20001
+    value["links"][0]["ports"][0]["public"] = 22
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 400
 
 
@@ -158,7 +158,7 @@ def test_custom_control_port_round_trip_and_collision_detection(admin):
         snapshot = topology.desired(database, True)
         plans = build(snapshot)
     entry = plans[link["entry_id"]]
-    assert "bind 0.0.0.0:8443 ssl crt" in entry["files"]["haproxy.cfg"]
+    assert "bind 192.0.2.10:8443 ssl crt" in entry["files"]["haproxy.cfg"]
     assert any(
         'bindAddr = "127.0.0.1"' in content
         for name, content in entry["files"].items()

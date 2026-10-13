@@ -20,7 +20,7 @@ class Backhaul(Adapter):
         ]
         common = f'transport = "tcp"\ntoken = {json.dumps(context.secrets["token"])}\nnodelay = true\nkeepalive_period = 30\nskip_optz = true\nsniffer = false\nweb_port = 0\n'
         entry["files"][context.filename + ".toml"] = (
-            f'[server]\nbind_addr = "0.0.0.0:{context.control}"\n'
+            f'[server]\nbind_addr = "{context.entry["address"]}:{context.control}"\n'
             + common
             + "heartbeat = 10\nchannel_size = 2048\nports = "
             + json.dumps(ports)
@@ -41,6 +41,7 @@ class Backhaul(Adapter):
                 "protocol": "tcp",
                 "source": context.exit["address"],
                 "port": context.control,
+                "destination": context.entry["address"],
             }
         )
         entry["listeners"].append(context.control)

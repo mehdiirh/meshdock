@@ -4,7 +4,9 @@ import re
 from ipaddress import IPv4Address
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .ports import bounds, normalize, segments
 
 
 class Model(BaseModel):
@@ -66,8 +68,37 @@ class Server(Host):
 
 
 class Port(Model):
-    public: int = Field(ge=1, le=65535)
-    target: int = Field(ge=1, le=65535)
+    public: int | str
+    target: int | str
+    exclude: list[int | str] = Field(default_factory=list, max_length=128)
+
+    @field_validator("public", "target", mode="before")
+    @classmethod
+    def port_range(cls, value):
+        return normalize(value)
+
+    @field_validator("exclude", mode="before")
+    @classmethod
+    def exceptions(cls, values):
+        if not isinstance(values, list):
+            raise ValueError("port_exclusions")
+        return [normalize(value) for value in values]
+
+    @model_validator(mode="after")
+    def matching_ranges(self):
+        first, last = bounds(self.public)
+        target_first, target_last = bounds(self.target)
+        if last - first != target_last - target_first:
+            raise ValueError("range_width")
+        previous = first - 1
+        for start, end in sorted(bounds(value) for value in self.exclude):
+            if start < first or end > last or start <= previous:
+                raise ValueError("port_exclusions")
+            previous = end
+        if not list(segments(self.model_dump())):
+            raise ValueError("empty_mapping")
+        return self
+
     host: str = "127.0.0.1"
 
     @field_validator("host")

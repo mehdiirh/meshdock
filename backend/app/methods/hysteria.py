@@ -30,7 +30,7 @@ class Hysteria2(Adapter):
             "salamander": {"password": context.secrets["token"]},
         }
         server = {
-            "listen": f":{context.control}",
+            "listen": f"{context.exit['address']}:{context.control}",
             "tls": {
                 "cert": f"{context.root}/{name}-ca.crt",
                 "key": f"{context.root}/{name}-tls.key",
@@ -67,5 +67,6 @@ class Hysteria2(Adapter):
                 "protocol": "udp",
                 "source": context.entry["address"],
                 "port": context.control,
+                "destination": context.exit["address"],
             }
         )

@@ -23,7 +23,9 @@ from pathlib import Path
 
 
 class OperationError(Exception):
-    pass
+    def __init__(self, code, detail=None):
+        super().__init__(code)
+        self.detail = detail or {}
 
 
 def run(arguments, *, input=None, check=True, timeout=180):
@@ -93,7 +95,15 @@ class Agent:
             raise OperationError("preflight_failed")
         if not shutil.which("apt-get"):
             raise OperationError("preflight_failed")
+        os_release = Path("/etc/os-release").read_text()
+        if not re.search(r'^ID=["\']?(debian|ubuntu)["\']?$', os_release, re.MULTILINE):
+            raise OperationError("preflight_failed")
         previous = self.manifest(self.current())
+        if plan.get("public_address") and shutil.which("ip"):
+            self.interface_for_address(plan["public_address"])
+        if not previous["units"] and shutil.which("iptables"):
+            if not run(["iptables", "-w", "-n", "-L", self.chain], check=False).returncode:
+                raise OperationError("ownership_conflict")
         for name in plan["files"]:
             if not re.fullmatch("[a-zA-Z0-9_.-]+", name) or name in (
                 "manifest.json",
@@ -115,18 +125,8 @@ class Agent:
                 and interface["name"] not in old_interfaces
             ):
                 raise OperationError("ownership_conflict")
-        if shutil.which("ss"):
-            listening = run(["ss", "-H", "-ltn"]).stdout.decode()
-            ports = {int(line.split()[3].rsplit(":", 1)[1]) for line in listening.splitlines()}
-            if (set(plan["listeners"]) - set(previous["listeners"])) & ports:
-                raise OperationError("ownership_conflict")
-        if shutil.which("ss"):
-            listening = run(["ss", "-H", "-lun"]).stdout.decode()
-            ports = {int(line.split()[3].rsplit(":", 1)[1]) for line in listening.splitlines()}
-            if (
-                set(plan.get("udp_listeners", [])) - set(previous.get("udp_listeners", []))
-            ) & ports:
-                raise OperationError("ownership_conflict")
+        self.socket_preflight(plan)
+        self.network_preflight(plan)
         if shutil.which("ip"):
             routes = json.loads(run(["ip", "-json", "route", "show"]).stdout)
             for interface in plan["interfaces"]:
@@ -135,6 +135,159 @@ class Agent:
                     for r in routes
                 ):
                     raise OperationError("ownership_conflict")
+
+    def network_chains(self):
+        return {
+            "pre": ("nat", "PREROUTING", self.chain + "_PRE"),
+            "post": ("nat", "POSTROUTING", self.chain + "_POST"),
+            "forward": ("filter", "FORWARD", self.chain + "_FWD"),
+            "mss": ("mangle", "FORWARD", self.chain + "_MSS"),
+        }
+
+    def interface_for_address(self, address):
+        interfaces = json.loads(run(["ip", "-json", "address", "show"]).stdout)
+        for interface in interfaces:
+            if any(item.get("local") == address for item in interface.get("addr_info", [])):
+                return interface["ifname"]
+        raise OperationError("public_address_missing")
+
+    def network_preflight(self, plan):
+        if not plan.get("network_interfaces"):
+            return
+        version = re.match(r"(\d+)\.(\d+)", platform.release())
+        if plan.get("shifted_ranges") and (
+            not version or tuple(map(int, version.groups())) < (4, 18)
+        ):
+            raise OperationError("range_kernel_unsupported")
+        if shutil.which("ip"):
+            for address in plan.get("forwarding_addresses", []):
+                self.interface_for_address(address)
+        marker = self.root / "network-state.json"
+        if not marker.exists() and shutil.which("iptables"):
+            for table, _, chain in self.network_chains().values():
+                if not run(
+                    ["iptables", "-w", "-t", table, "-n", "-L", chain], check=False
+                ).returncode:
+                    raise OperationError("ownership_conflict")
+
+    def network_down(self):
+        marker = self.root / "network-state.json"
+        if not marker.exists():
+            return
+        state = json.loads(marker.read_text())
+        for table, parent, chain in self.network_chains().values():
+            if run(["iptables", "-w", "-t", table, "-n", "-L", chain], check=False).returncode:
+                continue
+            while not run(
+                ["iptables", "-w", "-t", table, "-C", parent, "-j", chain], check=False
+            ).returncode:
+                run(["iptables", "-w", "-t", table, "-D", parent, "-j", chain])
+            run(["iptables", "-w", "-t", table, "-F", chain])
+            run(["iptables", "-w", "-t", table, "-X", chain])
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        if state["boot_id"] == boot_id:
+            for name, previous in state["sysctls"].items():
+                path = Path(name)
+                # Restore only the value we set, and only during the same boot.
+                if path.exists() and path.read_text().strip() == "1":
+                    path.write_text(previous)
+        marker.unlink()
+
+    def network_up(self):
+        self.network_down()
+        plan = self.manifest(self.current())
+        self.network_preflight(plan)
+        interfaces = set(plan.get("network_interfaces", []))
+        interfaces.update(
+            self.interface_for_address(address) for address in plan.get("forwarding_addresses", [])
+        )
+        sysctls = {}
+        for interface in interfaces:
+            if not re.fullmatch(r"[a-zA-Z0-9_.:-]{1,15}", interface):
+                raise OperationError("preflight_failed")
+            path = Path("/proc/sys/net/ipv4/conf") / interface / "forwarding"
+            sysctls[str(path)] = path.read_text().strip()
+        for interface in plan.get("loopback_interfaces", []):
+            path = Path("/proc/sys/net/ipv4/conf") / interface / "route_localnet"
+            sysctls[str(path)] = path.read_text().strip()
+        atomic_json(
+            self.root / "network-state.json",
+            {
+                "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+                "sysctls": sysctls,
+            },
+        )
+        try:
+            for name in sysctls:
+                Path(name).write_text("1")
+            for key, (table, parent, chain) in self.network_chains().items():
+                rules = plan["network_rules"][key]
+                if not rules:
+                    continue
+                lines = ["*" + table, ":" + chain + " - [0:0]"]
+                lines.extend("-A " + chain + " " + rule for rule in rules)
+                lines.extend(["COMMIT", ""])
+                run(["iptables-restore", "-w", "--noflush"], input="\n".join(lines).encode())
+                run(["iptables", "-w", "-t", table, "-I", parent, "1", "-j", chain])
+        except Exception:
+            self.network_down()
+            raise
+
+    def socket_preflight(self, plan):
+        if not shutil.which("ss"):
+            return
+        for protocol, flag in (("tcp", "-ltnpe"), ("udp", "-lunpe")):
+            listening = run(["ss", "-H", flag]).stdout.decode()
+            for line in listening.splitlines():
+                fields = line.split()
+                if len(fields) < 4:
+                    raise OperationError("preflight_failed")
+                address, port_text = fields[3].rsplit(":", 1)
+                address = address.strip("[]").split("%", 1)[0]
+                port = int(port_text)
+                if address == "::" and "v6only:1" in line:
+                    continue
+                if address.startswith("::ffff:"):
+                    address = address.removeprefix("::ffff:")
+                conflicts = [
+                    item
+                    for item in plan.get("sockets", [])
+                    if item["protocol"] == protocol
+                    and item["port"] == port
+                    and (address in ("*", "0.0.0.0", "::") or item["address"] == address)
+                ]
+                conflicts.extend(
+                    item
+                    for item in plan.get("forwarded_ranges", [])
+                    if item["protocol"] == protocol
+                    and item["start"] <= port <= item["end"]
+                    and (address in ("*", "0.0.0.0", "::") or item["address"] == address)
+                )
+                if not conflicts:
+                    continue
+                # Exempt live processes only when their systemd cgroup belongs to
+                # this installation. A port number in an old manifest is not proof.
+                pids = re.findall(r"pid=(\d+)", line)
+                owned = bool(pids)
+                for pid in pids:
+                    try:
+                        groups = Path(f"/proc/{pid}/cgroup").read_text()
+                    except OSError:
+                        owned = False
+                        break
+                    if not any(
+                        re.search(
+                            r"/" + re.escape(self.prefix) + r"[a-z0-9-]+\.service(?:/|$)", group
+                        )
+                        for group in groups.splitlines()
+                    ):
+                        owned = False
+                        break
+                if not owned:
+                    raise OperationError(
+                        "listener_conflict",
+                        {"protocol": protocol, "port": port, "address": address},
+                    )
 
     @property
     def package_policy_text(self):
@@ -161,6 +314,8 @@ class Agent:
             "openssh-server",
             "ca-certificates",
         ]
+        if plan.get("gre_checks"):
+            packages.append("iputils-ping")
         missing = [
             p
             for p in packages
@@ -241,6 +396,9 @@ class Agent:
             return
         self.preflight(plan)
         self.dependencies(plan, artifacts)
+        if not shutil.which("ss"):
+            raise OperationError("preflight_failed")
+        self.preflight(plan)
         directory.mkdir(parents=True, mode=0o700, exist_ok=True)
         for name, content in {**plan["files"], **plan["units"]}.items():
             path = directory / name
@@ -293,6 +451,10 @@ class Agent:
         lines.append("-F " + self.chain)
         for rule in rules:
             line = f'-A {self.chain} -s {rule["source"]} -p {rule["protocol"]}'
+            if rule.get("interface"):
+                line += f' -i {rule["interface"]}'
+            if rule.get("destination"):
+                line += f' -d {rule["destination"]}'
             if rule["protocol"] in ("tcp", "udp"):
                 line += f' --dport {rule["port"]}'
             lines.append(line + " -j ACCEPT")
@@ -305,12 +467,18 @@ class Agent:
         previous = self.manifest(self.current())
         desired = self.manifest(target)
         # A full generation is activated together locally. TCP sessions may reconnect.
-        for unit in previous["units"]:
+        for unit in sorted(
+            previous["units"], key=lambda name: not name.endswith("-network.service")
+        ):
             run(["systemctl", "stop", unit])
             run(["systemctl", "disable", unit], check=False)
             path = self.units / unit
             if path.is_symlink() and str(path.readlink()).startswith(str(self.root) + "/current/"):
                 path.unlink()
+        # Recover partially installed rules even if the unit never became active.
+        with (self.root / "network.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self.network_down()
         pointer = self.root / "current"
         if target:
             temporary = self.root / "current.next"
@@ -349,6 +517,7 @@ class Agent:
         journal = json.loads((directory / "journal.json").read_text())
         if journal["phase"] == "applied" and self.current() == directory:
             return
+        self.preflight(self.manifest(directory))
         journal["phase"] = "applying"
         atomic_json(directory / "journal.json", journal)
         self.switch(directory)
@@ -361,6 +530,20 @@ class Agent:
         for unit in plan["units"]:
             if run(["systemctl", "is-active", "--quiet", unit], check=False).returncode:
                 raise OperationError("health_failed") from None
+        if plan.get("network_interfaces"):
+            for key, (table, parent, chain) in self.network_chains().items():
+                if (
+                    plan["network_rules"][key]
+                    and run(
+                        ["iptables", "-w", "-t", table, "-C", parent, "-j", chain], check=False
+                    ).returncode
+                ):
+                    raise OperationError("health_failed")
+        for check in plan.get("gre_checks", []):
+            if run(
+                ["ping", "-I", check["interface"], "-c", "1", "-W", "3", check["peer"]], check=False
+            ).returncode:
+                raise OperationError("health_failed")
         for endpoint in plan["checks"]:
             try:
                 with socket.create_connection((endpoint["host"], endpoint["port"]), timeout=4):
@@ -403,6 +586,18 @@ class Agent:
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] in ("--network-up", "--network-down"):
+        agent = Agent(sys.argv[2])
+        if os.geteuid() != 0:
+            raise SystemExit("Root access is required.")
+        # systemctl is called while agent.lock is held; this must be a different lock.
+        with (agent.root / "network.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if sys.argv[1] == "--network-up":
+                agent.network_up()
+            else:
+                agent.network_down()
+        return
     if len(sys.argv) == 3 and sys.argv[1] == "--uninstall":
         agent = Agent(sys.argv[2])
         if os.geteuid() != 0:
@@ -431,7 +626,7 @@ def main():
         print(json.dumps({"ok": True}))
     except Exception as error:
         code = str(error) if isinstance(error, OperationError) else "remote_failed"
-        print(json.dumps({"ok": False, "code": code}))
+        print(json.dumps({"ok": False, "code": code, "detail": getattr(error, "detail", {})}))
     finally:
         lock.close()
 

@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 
 from .db import audit, uid
 from .methods import REGISTRY
+from .ports import contains, overlaps
 from .security import AppError, seal, unseal
 from .tls import create_identity
 
@@ -88,19 +89,26 @@ def validate(db, body):
         a, b = servers.get(link.entry_id), servers.get(link.exit_id)
         if not a or not b or a.id == b.id or a.role == "exit" or b.role == "entry":
             raise AppError("invalid_topology")
-        if len({p.public for p in link.ports}) != len(link.ports):
-            raise AppError("port_conflict")
+        adapter = REGISTRY[link.method]
+        adapter.validate_mappings(link.model_dump())
+        mappings = [p.model_dump() for p in link.ports]
+        for index, mapping in enumerate(mappings):
+            if any(overlaps(mapping, other) for other in mappings[:index]):
+                raise AppError("port_conflict")
         if not link.enabled:
             continue
         graph.setdefault(a.id, set()).add(b.id)
-        for p in link.ports:
-            # Internal ports are deterministic and reserved; don't collide with management SSH.
-            if 20000 <= p.public <= 60999 or p.public == a.ssh_port:
-                raise AppError("reserved_port")
-            k = (a.id, p.public)
-            if k in ports and ports[k] != link.policy:
-                raise AppError("pool_policy")
-            ports[k] = link.policy
+        native = adapter.kernel_mapping(link.model_dump())
+        for mapping in mappings:
+            if contains(mapping, a.ssh_port):
+                raise AppError("ssh_port_conflict")
+            for other, policy, kernel in ports.get(a.id, []):
+                if overlaps(mapping, other):
+                    if kernel or native:
+                        raise AppError("range_pool_conflict")
+                    if policy != link.policy:
+                        raise AppError("pool_policy")
+            ports.setdefault(a.id, []).append((mapping, link.policy, native))
 
     control_ports = set()
     for link in body.links:
@@ -114,10 +122,13 @@ def validate(db, body):
             link.entry_id if adapter.metadata["direction"] == "exit-to-entry" else link.exit_id
         )
         port = link.control_port
-        if 20000 <= port <= 60999 or (protocol == "tcp" and port == servers[server_id].ssh_port):
-            raise AppError("reserved_port")
+        if protocol == "tcp" and port == servers[server_id].ssh_port:
+            raise AppError("ssh_port_conflict")
         listener = (server_id, protocol, port)
-        if listener in control_ports or (protocol == "tcp" and (server_id, port) in ports):
+        if listener in control_ports or (
+            protocol == "tcp"
+            and any(contains(mapping, port) for mapping, _, _ in ports.get(server_id, []))
+        ):
             raise AppError("control_port_conflict")
         control_ports.add(listener)
 
@@ -225,5 +236,9 @@ def save(db, body, actor):
                 link.control_port,
             ),
         )
+    # Compile before committing: switching adapters must validate capacity and bindings.
+    from .planner import build
+
+    build(desired(db, True))
     db.execute("UPDATE state SET revision=revision+1 WHERE id=1")
     return {"revision": body.revision + 1, "job_id": enqueue(db, actor)}

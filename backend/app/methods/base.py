@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+from ..ports import count
+from ..security import AppError
+
 
 @dataclass(frozen=True)
 class Context:
@@ -19,10 +22,19 @@ class Context:
 
     @property
     def control(self):
-        return self.link.get("control_port") or 20000 + self.link["slot"]
+        return (
+            self.link.get("allocated_control")
+            or self.link.get("control_port")
+            or 20000 + self.link["slot"]
+        )
 
     def internal(self, index):
+        if "internal_ports" in self.link:
+            return self.link["internal_ports"][index]
         return 30000 + (self.link["slot"] - 1) * 16 + index
+
+    def auxiliary(self, index):
+        return self.link.get("auxiliary_ports", [22000 + self.link["slot"]])[index]
 
     @property
     def filename(self):
@@ -50,6 +62,55 @@ WantedBy=multi-user.target
 class Adapter:
     metadata: dict
     control_protocol: str | None = "tcp"
+
+    internal_on_exit = False
+    auxiliary_count = 0
+    max_expanded_ports = 512
+    native_ranges = False
+
+    @property
+    def mapping_capabilities(self):
+        return {
+            "ranges": True,
+            "exceptions": True,
+            "native_ranges": self.native_ranges,
+            "max_ports": 65535 if self.native_ranges else self.max_expanded_ports,
+            "max_listener_ports": self.max_expanded_ports,
+            "protocols": self.metadata["protocols"],
+            "platforms": ["debian", "ubuntu"],
+        }
+
+    def internal_address(self, link):
+        return "127.0.0.1"
+
+    def kernel_mapping(self, link):
+        return False
+
+    def validate_mappings(self, link):
+        if not self.kernel_mapping(link) and count(link["ports"]) > self.max_expanded_ports:
+            raise AppError(
+                "mapping_limit",
+                details={"limit": self.max_expanded_ports, "method": self.metadata["id"]},
+            )
+
+    def bindings(self, context, entry, exit):
+        for port in context.link.get("internal_ports", []):
+            entry["sockets"].append({"address": "127.0.0.1", "port": port, "protocol": "tcp"})
+        for port in context.link.get("auxiliary_ports", []):
+            entry["sockets"].append({"address": "127.0.0.1", "port": port, "protocol": "tcp"})
+        if self.control_protocol:
+            plan, server = (
+                (entry, context.entry)
+                if self.metadata["direction"] == "exit-to-entry"
+                else (exit, context.exit)
+            )
+            plan["sockets"].append(
+                {
+                    "address": server["address"],
+                    "port": context.control,
+                    "protocol": self.control_protocol,
+                }
+            )
 
     def configure(self, context, entry, exit):
         raise NotImplementedError

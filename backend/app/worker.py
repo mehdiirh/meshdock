@@ -304,7 +304,14 @@ class Worker:
             log(job["id"], "succeeded")
         except Exception as error:
             code = error.code if isinstance(error, AppError) else "worker_error"
-            log(job["id"], code, level="error")
+            details = error.details if isinstance(error, AppError) else None
+            log(
+                job["id"],
+                code,
+                detail=json.dumps(details) if details else "",
+                server=details.get("server_id") if details else None,
+                level="error",
+            )
             recovered = self.compensate(job, receipt, namespace)
             if not recovered:
                 self.finish(job, "recovery_required", code)

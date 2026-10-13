@@ -13,6 +13,10 @@ def script(namespace, rules):
     ]
     for rule in rules:
         line = f'-A {chain} -s {rule["source"]} -p {rule["protocol"]}'
+        if rule.get("interface"):
+            line += f' -i {rule["interface"]}'
+        if rule.get("destination"):
+            line += f' -d {rule["destination"]}'
         if rule["protocol"] in ("tcp", "udp"):
             line += f' --dport {rule["port"]}'
         lines.append(line + " -j ACCEPT")

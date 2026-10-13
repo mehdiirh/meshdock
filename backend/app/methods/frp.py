@@ -5,6 +5,8 @@ from .base import Adapter, service
 
 
 class FrpWSS(Adapter):
+    auxiliary_count = 1
+
     metadata = {
         "id": "frp_wss",
         "name": "FRP · WSS",
@@ -25,12 +27,13 @@ class FrpWSS(Adapter):
         # frps accepts plaintext WebSocket upgrades. The owned HAProxy listener
         # terminates verified WSS and forwards only over loopback to frps.
         entry["files"][name + "-tls.pem"] = context.secrets["tls_key"] + context.secrets["tls_cert"]
-        websocket_port = 22000 + context.link["slot"]
+        websocket_port = context.auxiliary(0)
         entry["relay"].append(
             {
                 "name": f"wss_{context.link['slot']}",
-                "bind": "0.0.0.0",
+                "bind": context.entry["address"],
                 "port": context.control,
+                "destination": context.entry["address"],
                 "host": "127.0.0.1",
                 "target": websocket_port,
                 "certificate": f"{context.root}/{name}-tls.pem",
@@ -81,5 +84,6 @@ remotePort = {context.internal(index)}
                 "protocol": "tcp",
                 "source": context.exit["address"],
                 "port": context.control,
+                "destination": context.entry["address"],
             }
         )

@@ -14,7 +14,7 @@ class Rathole(Adapter):
     }
 
     def configure(self, context, entry, exit):
-        server = f'[server]\nbind_addr = "0.0.0.0:{context.control}"\n[server.transport]\ntype = "noise"\n[server.transport.noise]\nlocal_private_key = {json.dumps(context.secrets["noise_private"])}\n'
+        server = f'[server]\nbind_addr = "{context.entry["address"]}:{context.control}"\n[server.transport]\ntype = "noise"\n[server.transport.noise]\nlocal_private_key = {json.dumps(context.secrets["noise_private"])}\n'
         client = f'[client]\nremote_addr = "{context.entry["address"]}:{context.control}"\n[client.transport]\ntype = "noise"\n[client.transport.noise]\nremote_public_key = {json.dumps(context.secrets["noise_public"])}\n'
         for index, port in enumerate(context.link["ports"]):
             name = f's{context.link["slot"]}_{index}'
@@ -35,6 +35,7 @@ class Rathole(Adapter):
                 "protocol": "tcp",
                 "source": context.exit["address"],
                 "port": context.control,
+                "destination": context.entry["address"],
             }
         )
         entry["listeners"].append(context.control)

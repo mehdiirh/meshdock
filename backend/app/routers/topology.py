@@ -39,7 +39,10 @@ def positions(body: models.Positions, actor=Depends(require("write"))):
 def methods(actor=Depends(require("read"))):
     from ..methods import REGISTRY
 
-    return [{**m.metadata, "control_protocol": m.control_protocol} for m in REGISTRY.values()]
+    return [
+        {**m.metadata, "control_protocol": m.control_protocol, "mapping": m.mapping_capabilities}
+        for m in REGISTRY.values()
+    ]
 
 
 @router.get("/preview")
@@ -57,6 +60,7 @@ def preview(actor=Depends(require("read"))):
             "ports": p["listeners"],
             "udp_ports": p["udp_listeners"],
             "method_count": p["method_count"],
+            "forwarded_ranges": p["forwarded_ranges"],
         }
         for id, p in plans.items()
     ]

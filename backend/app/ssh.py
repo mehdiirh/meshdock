@@ -129,5 +129,24 @@ class Remote:
         )
         result = json.loads(raw)
         if not result.get("ok"):
-            raise AppError(result.get("code", "remote_failed"))
+            details = result.get("detail", {})
+            safe = {}
+            if result.get("code") == "listener_conflict":
+                from ipaddress import ip_address
+
+                if (
+                    details.get("protocol") in ("tcp", "udp")
+                    and isinstance(details.get("port"), int)
+                    and 1 <= details["port"] <= 65535
+                ):
+                    address = details.get("address", "")
+                    if address not in ("*", "0.0.0.0", "::"):
+                        address = str(ip_address(address))
+                    safe = {
+                        "protocol": details["protocol"],
+                        "port": details["port"],
+                        "address": address,
+                        "server_id": self.server["id"],
+                    }
+            raise AppError(result.get("code", "remote_failed"), details=safe)
         return result
