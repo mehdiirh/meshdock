@@ -158,3 +158,6 @@ msgstr "An existing service occupies a required listener. Add an exception or ch
 
 msgid "range_target_conflict"
 msgstr "GRE target ranges overlap for different destination hosts on the same connection."
+
+msgid "descriptor_capacity"
+msgstr "The server file-descriptor limits cannot accommodate this deployment. Review the required and available capacity."

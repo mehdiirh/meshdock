@@ -34,7 +34,7 @@ class FrpWSS(Adapter):
                 "bind": context.entry["address"],
                 "port": context.control,
                 "destination": context.entry["address"],
-                "host": "127.0.0.1",
+                "host": context.bind_address,
                 "target": websocket_port,
                 "certificate": f"{context.root}/{name}-tls.pem",
             }
@@ -43,9 +43,9 @@ class FrpWSS(Adapter):
             "{ single = " + str(context.internal(i)) + " }"
             for i in range(len(context.link["ports"]))
         )
-        entry["files"][name + ".toml"] = f"""bindAddr = "127.0.0.1"
+        entry["files"][name + ".toml"] = f"""bindAddr = "{context.bind_address}"
 bindPort = {websocket_port}
-proxyBindAddr = "127.0.0.1"
+proxyBindAddr = "{context.bind_address}"
 auth.method = "token"
 auth.token = {token}
 allowPorts = [{ports}]
@@ -71,7 +71,9 @@ localPort = {port['target']}
 remotePort = {context.internal(index)}
 """
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
+            entry["backends"].append(
+                (port, context.bind_address, context.internal(index), context.link)
+            )
         exit["files"][name + ".toml"] = client
         for plan, binary in ((entry, "frps"), (exit, "frpc")):
             plan["binaries"].append(binary)

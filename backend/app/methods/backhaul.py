@@ -15,7 +15,7 @@ class Backhaul(Adapter):
 
     def configure(self, context, entry, exit):
         ports = [
-            f'127.0.0.1:{context.internal(index)}={port["host"]}:{port["target"]}'
+            f'{context.bind_address}:{context.internal(index)}={port["host"]}:{port["target"]}'
             for index, port in enumerate(context.link["ports"])
         ]
         common = f'transport = "tcp"\ntoken = {json.dumps(context.secrets["token"])}\nnodelay = true\nkeepalive_period = 30\nskip_optz = true\nsniffer = false\nweb_port = 0\n'
@@ -47,4 +47,6 @@ class Backhaul(Adapter):
         entry["listeners"].append(context.control)
         for index, port in enumerate(context.link["ports"]):
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
+            entry["backends"].append(
+                (port, context.bind_address, context.internal(index), context.link)
+            )

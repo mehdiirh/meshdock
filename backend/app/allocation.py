@@ -4,7 +4,7 @@ from collections import defaultdict
 from itertools import chain
 
 from .methods import REGISTRY
-from .ports import contains, expand, segments
+from .ports import bounds, contains, expand, segments
 from .security import AppError
 
 
@@ -49,7 +49,7 @@ def allocate(snapshot):
                     raise AppError("control_port_conflict")
                 link["allocated_control"] = link["control_port"]
             else:
-                candidates = chain([20000 + link["slot"]], range(1024, 65536))
+                candidates = chain([20000 + link["slot"]], range(1024, 65536), range(1, 1024))
                 port = next(
                     (
                         p
@@ -71,37 +71,41 @@ def allocate(snapshot):
                 occupied.add((server, protocol, port))
                 link["allocated_control"] = port
 
-    # Socket adapters bind application listeners to the public IPv4 and internal
-    # listeners to loopback. Port numbers can therefore coexist on distinct IPs.
+    # Separate loopback addresses give each transport its own port space. Build
+    # the free-port iterator once; restarting a scan per port becomes quadratic.
     internal = defaultdict(set)
     for link in links:
         adapter = REGISTRY[link["method"]]
         if adapter.kernel_mapping(link):
             link["internal_ports"] = []
             continue
+        link["range_mapping"] = any(
+            bounds(mapping["public"])[0] != bounds(mapping["public"])[1] or mapping.get("exclude")
+            for mapping in link["ports"]
+        )
         link["ports"] = expand(link["ports"])
         server = link["exit_id"] if adapter.internal_on_exit else link["entry_id"]
         bind = adapter.internal_address(link)
+        link["internal_address"] = bind
         key = (server, bind)
+        unavailable = set(internal[key])
+        # A wildcard management listener must never be shadowed.
+        unavailable.add(servers[server]["ssh_port"])
+        for first, last in targets[key]:
+            unavailable.update(range(first, last + 1))
+        available = (p for p in chain(range(30000, 65536), range(1, 30000)) if p not in unavailable)
         selected = []
         for index in range(len(link["ports"]) + adapter.auxiliary_count):
-            preferred = 30000 + (link["slot"] - 1) * 16 + index if index < 16 else 46000 + index
-            candidates = chain([preferred], range(30000, 65536), range(1024, 30000))
-            port = next(
-                (
-                    p
-                    for p in candidates
-                    if p <= 65535
-                    and p not in internal[key]
-                    and p != servers[server]["ssh_port"]
-                    and not any(start <= p <= end for start, end in targets[key])
-                ),
-                None,
-            )
+            preferred = 30000 + (link["slot"] - 1) * 16 + index
+            if preferred <= 65535 and preferred not in unavailable:
+                port = preferred
+            else:
+                port = next(available, None)
             if port is None:
                 raise AppError("port_capacity")
             selected.append(port)
-            internal[key].add(port)
+            unavailable.add(port)
+        internal[key].update(selected)
         link["internal_ports"] = selected[: len(link["ports"])]
         link["auxiliary_ports"] = selected[len(link["ports"]) :]
     return links

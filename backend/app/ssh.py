@@ -148,5 +148,12 @@ class Remote:
                         "address": address,
                         "server_id": self.server["id"],
                     }
+            if result.get("code") == "descriptor_capacity":
+                safe = {
+                    key: value
+                    for key, value in details.items()
+                    if key in ("required", "available") and type(value) is int and value >= 0
+                }
+                safe["server_id"] = self.server["id"]
             raise AppError(result.get("code", "remote_failed"), details=safe)
         return result

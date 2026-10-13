@@ -125,6 +125,7 @@ class Agent:
                 and interface["name"] not in old_interfaces
             ):
                 raise OperationError("ownership_conflict")
+        self.resource_preflight(plan)
         self.socket_preflight(plan)
         self.network_preflight(plan)
         if shutil.which("ip"):
@@ -233,9 +234,53 @@ class Agent:
             self.network_down()
             raise
 
+    def resource_preflight(self, plan):
+        resources = plan.get("resources", {})
+        if not resources.get("nofile"):
+            return
+        maximum = int(Path("/proc/sys/fs/nr_open").read_text())
+        if resources["nofile"] > maximum:
+            raise OperationError(
+                "descriptor_capacity", {"required": resources["nofile"], "available": maximum}
+            )
+        allocated, unused, total = map(int, Path("/proc/sys/fs/file-nr").read_text().split())
+        available = total - allocated + unused
+        if resources["descriptor_budget"] > available:
+            raise OperationError(
+                "descriptor_capacity",
+                {"required": resources["descriptor_budget"], "available": available},
+            )
+
+    def socket_readiness(self, plan):
+        # Readiness is about every declared listener, even when target services
+        # in a range have not been started yet. One ss snapshot per protocol
+        # avoids thousands of network probes and their sequential timeouts.
+        if not plan.get("sockets"):
+            return
+        for protocol, flag in (("tcp", "-ltn"), ("udp", "-lun")):
+            required = {
+                (item["address"], item["port"])
+                for item in plan["sockets"]
+                if item["protocol"] == protocol
+            }
+            if not required:
+                continue
+            actual = set()
+            for line in run(["ss", "-H", flag]).stdout.decode().splitlines():
+                fields = line.split()
+                if len(fields) < 4:
+                    raise OperationError("health_failed")
+                host, port = fields[3].rsplit(":", 1)
+                actual.add((host.strip("[]"), int(port)))
+            if not required.issubset(actual):
+                raise OperationError("health_failed")
+
     def socket_preflight(self, plan):
         if not shutil.which("ss"):
             return
+        sockets = {}
+        for item in plan.get("sockets", []):
+            sockets.setdefault((item["protocol"], item["port"]), set()).add(item["address"])
         for protocol, flag in (("tcp", "-ltnpe"), ("udp", "-lunpe")):
             listening = run(["ss", "-H", flag]).stdout.decode()
             for line in listening.splitlines():
@@ -249,21 +294,17 @@ class Agent:
                     continue
                 if address.startswith("::ffff:"):
                     address = address.removeprefix("::ffff:")
-                conflicts = [
-                    item
-                    for item in plan.get("sockets", [])
-                    if item["protocol"] == protocol
-                    and item["port"] == port
-                    and (address in ("*", "0.0.0.0", "::") or item["address"] == address)
-                ]
-                conflicts.extend(
-                    item
-                    for item in plan.get("forwarded_ranges", [])
-                    if item["protocol"] == protocol
+                addresses = sockets.get((protocol, port), set())
+                socket_conflict = bool(addresses) and (
+                    address in ("*", "0.0.0.0", "::") or address in addresses
+                )
+                range_conflict = any(
+                    item["protocol"] == protocol
                     and item["start"] <= port <= item["end"]
                     and (address in ("*", "0.0.0.0", "::") or item["address"] == address)
+                    for item in plan.get("forwarded_ranges", [])
                 )
-                if not conflicts:
+                if not socket_conflict and not range_conflict:
                     continue
                 # Exempt live processes only when their systemd cgroup belongs to
                 # this installation. A port number in an old manifest is not proof.
@@ -544,6 +585,7 @@ class Agent:
                 ["ping", "-I", check["interface"], "-c", "1", "-W", "3", check["peer"]], check=False
             ).returncode:
                 raise OperationError("health_failed")
+        self.socket_readiness(plan)
         for endpoint in plan["checks"]:
             try:
                 with socket.create_connection((endpoint["host"], endpoint["port"]), timeout=4):

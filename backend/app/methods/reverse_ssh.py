@@ -2,8 +2,10 @@ from .base import Adapter, service
 
 
 class ReverseSSH(Adapter):
-    # Keep authorized_keys lines and OpenSSH forwarding options comfortably bounded.
-    max_expanded_ports = 64
+    # OpenSSH allocates a channel per remote listener and per active connection.
+    # Its 16,384-channel ceiling is per connection, not a limit on this link.
+    # Split listeners across sessions, leaving most channels for live traffic.
+    forwards_per_session = 4096
 
     metadata = {
         "id": "reverse_ssh",
@@ -16,13 +18,14 @@ class ReverseSSH(Adapter):
 
     def configure(self, context, entry, exit):
         name = context.filename
+        address = context.bind_address
         entry["files"][name + "-host"] = context.secrets["host_private"]
-        options = ",".join(
-            f'permitlisten="127.0.0.1:{context.internal(index)}"'
-            for index in range(len(context.link["ports"]))
-        )
+        # Limit this key to the link's private listener address. Enumerating every
+        # port here would exceed OpenSSH's authorized_keys line-size limit.
         entry["files"][name + "-authorized"] = (
-            "restrict,port-forwarding," + options + " " + context.secrets["client_public"] + "\n"
+            f'restrict,port-forwarding,permitlisten="{address}:*" '
+            + context.secrets["client_public"]
+            + "\n"
         )
         entry["files"][name + "-sshd.conf"] = f"""Port {context.control}
 ListenAddress {context.entry["address"]}
@@ -36,7 +39,9 @@ AuthenticationMethods publickey
 UsePAM no
 AllowUsers root
 AllowTcpForwarding remote
-GatewayPorts no
+AllowStreamLocalForwarding no
+GatewayPorts clientspecified
+PermitListen {address}:*
 PermitTTY no
 X11Forwarding no
 AllowAgentForwarding no
@@ -51,13 +56,36 @@ LogLevel ERROR
         peer = context.entry["address"]
         known_host = peer if context.control == 22 else f"[{peer}]:{context.control}"
         exit["files"][name + "-known"] = known_host + " " + context.secrets["host_public"] + "\n"
-        forwards = " ".join(
-            f'-R 127.0.0.1:{context.internal(index)}:{port["host"]}:{port["target"]}'
-            for index, port in enumerate(context.link["ports"])
-        )
-        exit["units"][context.tag + ".service"] = service(
-            f'/usr/bin/ssh -NT -F /dev/null -i {context.root}/{name}-key -o UserKnownHostsFile={context.root}/{name}-known -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -p {context.control} {forwards} root@{context.entry["address"]}'
-        )
+        common = f"""Host tunnel
+  HostName {peer}
+  Port {context.control}
+  User root
+  IdentityFile {context.root}/{name}-key
+  UserKnownHostsFile {context.root}/{name}-known
+  GlobalKnownHostsFile /dev/null
+  StrictHostKeyChecking yes
+  IdentitiesOnly yes
+  IdentityAgent none
+  BatchMode yes
+  ExitOnForwardFailure yes
+  ServerAliveInterval 15
+  ServerAliveCountMax 3
+  ConnectTimeout 10
+"""
+        ports = context.link["ports"]
+        for start in range(0, len(ports), self.forwards_per_session):
+            batch = start // self.forwards_per_session
+            config_name = f"{name}-ssh-{batch}.conf"
+            forwards = [
+                f'  RemoteForward {address}:{context.internal(index)} {port["host"]}:{port["target"]}'
+                for index, port in enumerate(
+                    ports[start : start + self.forwards_per_session], start
+                )
+            ]
+            exit["files"][config_name] = common + "\n".join(forwards) + "\n"
+            exit["units"][f"{context.tag}-ssh-{batch}.service"] = service(
+                f"/usr/bin/ssh -NT -F {context.root}/{config_name} tunnel"
+            )
         entry["firewall"].append(
             {
                 "protocol": "tcp",
@@ -67,6 +95,6 @@ LogLevel ERROR
             }
         )
         entry["listeners"].append(context.control)
-        for index, port in enumerate(context.link["ports"]):
+        for index, port in enumerate(ports):
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
+            entry["backends"].append((port, address, context.internal(index), context.link))

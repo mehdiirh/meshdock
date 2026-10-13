@@ -91,12 +91,16 @@ def test_all_adapters_compile_ranges_with_exceptions(admin, method):
         assert len(public) == 17
         assert 30004 not in public and 30010 not in public
         assert (
-            len({item["port"] for item in entry["sockets"] if item["address"] == "127.0.0.1"}) >= 17
+            len(
+                {item["port"] for item in entry["sockets"] if item["address"].startswith("127.77.")}
+            )
+            >= 17
         )
-        assert {check["port"] for check in exit["checks"]} == {40000 + p - 30000 for p in public}
+        assert not exit["checks"]  # Range targets may be started later.
+        assert len(entry["checks"]) == 1
 
 
-def test_full_gre_range_compact_and_method_switch_rejected_atomically(admin):
+def test_full_gre_range_compact_and_method_switch_supported(admin):
     value, link = single_link(admin)
     link["ports"] = [
         {
@@ -119,11 +123,20 @@ def test_full_gre_range_compact_and_method_switch_rejected_atomically(admin):
     for method in REGISTRY:
         if method == "gre":
             continue
-        bad = copy.deepcopy(value)
-        bad["links"][0]["method"] = method
-        response = admin.put("/api/v1/topology", json=payload(bad))
-        assert response.json()["code"] == "mapping_limit"
-        assert admin.get("/api/v1/topology").json() == value
+        value["links"][0]["method"] = method
+        response = admin.put("/api/v1/topology", json=payload(value))
+        assert response.status_code == 200, response.text
+        value = admin.get("/api/v1/topology").json()
+        with connect() as database:
+            plans = build(topology.desired(database, True))
+        plan = plans[link["entry_id"]]
+        public = {s["port"] for s in plan["sockets"] if s["address"] == entry["address"]}
+        assert 1023 in public and 65535 in public
+        assert "listen public_8080\n" not in plan["files"]["haproxy.cfg"]
+        assert len(plan["checks"]) == 1
+        assert plan["files"]["haproxy.cfg"].count("check inter") <= 2
+        assert len(plan["files"]["firewall.sh"].splitlines()) < 25
+        assert plan["resources"]["nofile"] > 65536
     value["links"][0]["ports"][0]["exclude"] = []
     assert admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "ssh_port_conflict"
 
@@ -300,9 +313,8 @@ def test_internal_allocation_respects_destination_exceptions_and_bind_address(ad
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
     with connect() as database:
         plans = build(topology.desired(database, True))
-    assert {
-        item["port"] for item in plans[middle["id"]]["sockets"] if item["address"] == "127.0.0.1"
-    } == {30000}
+    assert any(item["address"].startswith("127.77.") for item in plans[middle["id"]]["sockets"])
+    assert not any(item["address"] == "127.0.0.1" for item in plans[middle["id"]]["sockets"])
 
 
 def test_control_port_cannot_replace_a_declared_destination_service(admin):
@@ -329,3 +341,87 @@ def test_control_port_cannot_replace_a_declared_destination_service(admin):
     assert (
         admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "control_port_conflict"
     )
+
+
+def test_reverse_ssh_shards_forwards_and_bounds_authorized_key_line(admin):
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    value, link = single_link(admin, "reverse_ssh")
+    link["ports"] = [{"public": "10000-14096", "target": "20000-24096", "host": "127.0.0.1"}]
+    assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
+    with connect() as database:
+        plans = build(topology.desired(database, True))
+    entry, exit = plans[link["entry_id"]], plans[link["exit_id"]]
+    configs = [v for k, v in exit["files"].items() if "-ssh-" in k]
+    assert [c.count("RemoteForward") for c in configs] == [4096, 1]
+    assert 'permitlisten="127.77.0.1:*"' in entry["files"]["link-1-authorized"]
+    assert len(entry["files"]["link-1-authorized"].encode()) < 8192
+    assert "PermitListen 127.77.0.1:*" in entry["files"]["link-1-sshd.conf"]
+    assert "AllowStreamLocalForwarding no" in entry["files"]["link-1-sshd.conf"]
+    assert all(len(unit) < 1500 for unit in exit["units"].values())
+    # The actual local OpenSSH parser validates the generated large client file;
+    # -G prints configuration and never connects to a server.
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "ssh.conf"
+        path.write_text(configs[0])
+        result = subprocess.run(["ssh", "-G", "-F", str(path), "tunnel"], capture_output=True)
+        assert result.returncode == 0, result.stderr.decode()
+        assert result.stdout.count(b"remoteforward ") == 4096
+
+
+def test_large_parallel_links_have_distinct_private_listener_spaces(admin):
+    from app.allocation import allocate
+
+    value, link = single_link(admin, "rathole")
+    link["ports"] = [{"public": "1023-65535", "target": "1023-65535", "host": "127.0.0.1"}]
+    value["links"].append({**copy.deepcopy(link), "id": "d" * 32, "method": "frp_wss"})
+    assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
+    with connect() as database:
+        allocations = allocate(topology.desired(database, True))
+    assert len(allocations) == 2
+    assert all(len(a["internal_ports"]) == 64513 for a in allocations)
+    assert allocations[0]["internal_address"] != allocations[1]["internal_address"]
+    assert all(1 <= a["allocated_control"] < 1023 for a in allocations)
+    assert allocations[0]["allocated_control"] != allocations[1]["allocated_control"]
+
+
+def test_live_descriptor_capacity_fails_before_deployment(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    agent = Agent("a" * 10, root=tmp_path)
+    plan = empty()
+    plan["resources"] = {"nofile": 264000, "descriptor_budget": 200000}
+    original = Path.read_text
+    values = {"/proc/sys/fs/nr_open": "1048576", "/proc/sys/fs/file-nr": "10000 0 1000000"}
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda p, *a, **k: values[str(p)] if str(p) in values else original(p, *a, **k),
+    )
+    agent.resource_preflight(plan)
+    values["/proc/sys/fs/nr_open"] = "65536"
+    with pytest.raises(OperationError, match="descriptor_capacity") as error:
+        agent.resource_preflight(plan)
+    assert error.value.detail == {"required": 264000, "available": 65536}
+    values["/proc/sys/fs/nr_open"] = "1048576"
+    values["/proc/sys/fs/file-nr"] = "900000 0 1000000"
+    with pytest.raises(OperationError, match="descriptor_capacity"):
+        agent.resource_preflight(plan)
+
+
+def test_range_readiness_detects_missing_listener_without_probing_targets(tmp_path, monkeypatch):
+    agent = Agent("a" * 10, root=tmp_path)
+    plan = empty()
+    plan["sockets"] = [
+        {"address": "127.77.0.1", "port": p, "protocol": "tcp"} for p in range(30000, 31000)
+    ]
+    output = "\n".join(f"LISTEN 0 128 127.77.0.1:{p} 0.0.0.0:*" for p in range(30000, 31000))
+    monkeypatch.setattr(
+        remote_agent, "run", lambda *a, **k: SimpleNamespace(stdout=output.encode(), returncode=0)
+    )
+    agent.socket_readiness(plan)
+    output = output.split("\n", 1)[1]
+    with pytest.raises(OperationError, match="health_failed"):
+        agent.socket_readiness(plan)

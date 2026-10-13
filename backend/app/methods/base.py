@@ -28,6 +28,10 @@ class Context:
             or 20000 + self.link["slot"]
         )
 
+    @property
+    def bind_address(self):
+        return self.link.get("internal_address", "127.0.0.1")
+
     def internal(self, index):
         if "internal_ports" in self.link:
             return self.link["internal_ports"][index]
@@ -65,7 +69,8 @@ class Adapter:
 
     internal_on_exit = False
     auxiliary_count = 0
-    max_expanded_ports = 512
+    max_expanded_ports = 65535
+    forwards_per_session = None
     native_ranges = False
 
     @property
@@ -76,12 +81,16 @@ class Adapter:
             "native_ranges": self.native_ranges,
             "max_ports": 65535 if self.native_ranges else self.max_expanded_ports,
             "max_listener_ports": self.max_expanded_ports,
+            "capacity_basis": "kernel" if self.native_ranges else "system_resources",
+            "forwards_per_session": self.forwards_per_session,
             "protocols": self.metadata["protocols"],
             "platforms": ["debian", "ubuntu"],
         }
 
     def internal_address(self, link):
-        return "127.0.0.1"
+        # Linux routes the entire 127/8 block locally. Each link gets its own
+        # listener space without changing interfaces or claiming application ports.
+        return f"127.77.{link['slot'] // 256}.{link['slot'] % 256}"
 
     def kernel_mapping(self, link):
         return False
@@ -95,9 +104,13 @@ class Adapter:
 
     def bindings(self, context, entry, exit):
         for port in context.link.get("internal_ports", []):
-            entry["sockets"].append({"address": "127.0.0.1", "port": port, "protocol": "tcp"})
+            entry["sockets"].append(
+                {"address": context.bind_address, "port": port, "protocol": "tcp"}
+            )
         for port in context.link.get("auxiliary_ports", []):
-            entry["sockets"].append({"address": "127.0.0.1", "port": port, "protocol": "tcp"})
+            entry["sockets"].append(
+                {"address": context.bind_address, "port": port, "protocol": "tcp"}
+            )
         if self.control_protocol:
             plan, server = (
                 (entry, context.entry)

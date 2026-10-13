@@ -49,12 +49,14 @@ class Hysteria2(Adapter):
         for index, port in enumerate(context.link["ports"]):
             client["tcpForwarding"].append(
                 {
-                    "listen": f"127.0.0.1:{context.internal(index)}",
+                    "listen": f"{context.bind_address}:{context.internal(index)}",
                     "remote": f'{port["host"]}:{port["target"]}',
                 }
             )
             entry["listeners"].append(context.internal(index))
-            entry["backends"].append((port, "127.0.0.1", context.internal(index), context.link))
+            entry["backends"].append(
+                (port, context.bind_address, context.internal(index), context.link)
+            )
         # JSON is accepted by Hysteria's configuration loader and avoids YAML quoting ambiguities.
         for plan, role, config in ((entry, "client", client), (exit, "server", server)):
             plan["files"][name + ".json"] = json.dumps(config, indent=2)

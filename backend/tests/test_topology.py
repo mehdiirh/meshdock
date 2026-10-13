@@ -160,7 +160,7 @@ def test_custom_control_port_round_trip_and_collision_detection(admin):
     entry = plans[link["entry_id"]]
     assert "bind 192.0.2.10:8443 ssl crt" in entry["files"]["haproxy.cfg"]
     assert any(
-        'bindAddr = "127.0.0.1"' in content
+        'bindAddr = "127.77.0.1"' in content
         for name, content in entry["files"].items()
         if name.endswith(".toml")
     )
