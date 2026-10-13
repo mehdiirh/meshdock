@@ -2069,3 +2069,63 @@ fieldset.field legend {
   gap: 12px;
   margin-bottom: 20px;
 }
+
+.jump-settings {
+  min-width: 0;
+  padding: 18px;
+  margin: 24px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.jump-settings legend {
+  padding-inline: 8px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.jump-settings > p {
+  margin: 16px 0;
+  line-height: 1.6;
+}
+.jump-route {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  direction: ltr;
+}
+.jump-route strong {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.jump-choices {
+  display: grid;
+  gap: 8px;
+  max-height: 170px;
+  overflow: auto;
+  margin-bottom: 18px;
+}
+.jump-choices button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: start;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.jump-choices button.active {
+  border-color: var(--accent-strong);
+  background: var(--accent-bg);
+}
+.jump-choices small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}

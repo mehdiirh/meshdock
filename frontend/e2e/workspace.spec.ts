@@ -515,3 +515,152 @@ test("uncertain removal stays visible and requires recovery before actions", asy
     "وضعیت فعلی آن قطعی نیست",
   );
 });
+
+test("saves a jump host and verifies the target through that path", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/credentials", (route) =>
+    route.fulfill({
+      json: [{ id: "e".repeat(32), name: "Fixture key", kind: "key" }],
+    }),
+  );
+  let discovery: unknown;
+  await page.route("**/api/v1/servers/discover", (route) => {
+    discovery = route.request().postDataJSON();
+    return route.fulfill({ json: { fingerprint: "SHA256:" + "T".repeat(43) } });
+  });
+  await page
+    .locator(".server-node")
+    .filter({ hasText: "Exit fixture" })
+    .getByRole("button", { name: "Edit server" })
+    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Via jump host", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Continue", exact: true }),
+  ).toBeDisabled();
+  await page
+    .locator(".jump-choices button")
+    .filter({ hasText: "Entry fixture" })
+    .click();
+  await expect(
+    page.getByLabel("Jump-host address", { exact: true }),
+  ).toHaveValue("192.0.2.10");
+  await page.screenshot({
+    path: test.info().outputPath("ssh-jump-host.png"),
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Read host fingerprint", exact: true })
+    .click();
+  await page.getByLabel("I verified this fingerprint", { exact: true }).check();
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await page
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  const server = (await saved)
+    .postDataJSON()
+    .servers.find((s: { id: string }) => s.id === b);
+  expect(server.ssh_jump).toEqual({
+    host: "192.0.2.10",
+    ssh_port: 22,
+    username: "root",
+    credential_id: "e".repeat(32),
+    fingerprint: "SHA256:" + "A".repeat(43),
+  });
+  expect(server.fingerprint).toBe("SHA256:" + "T".repeat(43));
+  expect(discovery).toEqual({
+    host: "192.0.2.20",
+    ssh_port: 22,
+    ssh_jump: server.ssh_jump,
+  });
+});
+
+test("custom jump keys require trust and direct mode clears the saved path", async ({
+  page,
+}) => {
+  const initial = structuredClone(topology);
+  Object.assign(initial.servers[1], {
+    ssh_jump: {
+      host: "192.0.2.50",
+      ssh_port: 2222,
+      username: "operator",
+      credential_id: "e".repeat(32),
+      fingerprint: "SHA256:" + "J".repeat(43),
+    },
+  });
+  await page.route("**/api/v1/topology", (route) =>
+    route.fulfill({
+      json:
+        route.request().method() === "PUT"
+          ? { revision: 2, job_id: "job" }
+          : initial,
+    }),
+  );
+  await page.route("**/api/v1/credentials", (route) =>
+    route.fulfill({
+      json: [{ id: "e".repeat(32), name: "Fixture key", kind: "key" }],
+    }),
+  );
+  await page.route("**/api/v1/servers/discover", (route) =>
+    route.fulfill({ json: { fingerprint: "SHA256:" + "K".repeat(43) } }),
+  );
+  await page.reload();
+  await page
+    .locator(".server-node")
+    .filter({ hasText: "Exit fixture" })
+    .getByRole("button", { name: "Edit server" })
+    .click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByLabel("Jump-host address", { exact: true })
+    .fill("192.0.2.51");
+  const next = page.getByRole("button", { name: "Continue", exact: true });
+  await expect(next).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Read jump-host key", exact: true })
+    .click();
+  await expect(next).toBeDisabled();
+  await page
+    .getByLabel("I verified this jump-host fingerprint independently.", {
+      exact: true,
+    })
+    .check();
+  await expect(next).toBeEnabled();
+  const username = page.getByLabel("Jump-host username", { exact: true });
+  await username.fill("invalid user");
+  expect(
+    await username.evaluate((el: HTMLInputElement) => el.checkValidity()),
+  ).toBe(false);
+  await username.fill("operator-user");
+  expect(
+    await username.evaluate((el: HTMLInputElement) => el.checkValidity()),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Direct", exact: true }).click();
+  await next.click();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Read host fingerprint", exact: true })
+    .click();
+  await page.getByLabel("I verified this fingerprint", { exact: true }).check();
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await page
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  expect(
+    (await saved).postDataJSON().servers.find((s: { id: string }) => s.id === b)
+      .ssh_jump,
+  ).toBeNull();
+});

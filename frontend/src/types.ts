@@ -1,11 +1,19 @@
 export type Role = "entry" | "exit" | "both";
 export type Method = string;
 export type Policy = "roundrobin" | "leastconn" | "failover";
+export interface SSHJump {
+  host: string;
+  ssh_port: number;
+  username: string;
+  credential_id: string;
+  fingerprint: string;
+}
 export interface Server {
   id: string;
   name: string;
   host: string;
   ssh_port: number;
+  ssh_jump?: SSHJump | null;
   role: Role;
   address: string;
   credential_id: string;

@@ -316,5 +316,22 @@
     "restoreHint": "Put this connection and any missing endpoint servers back into the requested configuration using its original settings. Queue reconciliation, including any other pending changes.",
     "recoverFirst": "Complete recovery in the deployment panel before retrying or restoring.",
     "wait": "Wait for the current deployment to finish."
+  },
+  "sshJump": {
+    "title": "SSH connection path",
+    "direct": "Direct",
+    "via": "Via jump host",
+    "hint": "Use another SSH server to reach this server. Only management traffic uses this path; tunnel traffic keeps its configured route. The jump host must permit TCP forwarding to the target SSH port.",
+    "controller": "MeshDock",
+    "jump": "Jump host",
+    "target": "Target server",
+    "reuse": "Use a saved server, or enter a custom jump host below",
+    "host": "Jump-host address",
+    "port": "Jump-host SSH port",
+    "username": "Jump-host username",
+    "credential": "Jump-host credential",
+    "chooseCredential": "Choose a saved credential",
+    "discover": "Read jump-host key",
+    "trust": "I verified this jump-host fingerprint independently."
   }
 }

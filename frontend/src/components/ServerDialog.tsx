@@ -9,7 +9,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, useTopology } from "../api";
+import { JumpHostSettings, jumpValid } from "./JumpHostSettings";
 import { newId, type Server, type Credential, type Role } from "../types";
 import { Modal, Field, Spinner, ErrorMessage } from "./Primitives";
 export function ServerDialog({
@@ -46,18 +47,26 @@ export function ServerDialog({
       position: { x: 100, y: 100 },
     },
   );
+  const inventory = useTopology();
   const credentials = useQuery({
     queryKey: ["credentials"],
     queryFn: () => api<Credential[]>("/credentials"),
   });
   const discover = useMutation({
-    mutationFn: () =>
-      api<{ fingerprint: string }>("/servers/discover", "POST", {
-        host: value.host,
-        ssh_port: value.ssh_port,
-      }),
-    onSuccess: (data) => {
-      setValue((v) => ({ ...v, fingerprint: data.fingerprint }));
+    mutationFn: (request: {
+      host: string;
+      ssh_port: number;
+      ssh_jump: Server["ssh_jump"];
+    }) => api<{ fingerprint: string }>("/servers/discover", "POST", request),
+    onSuccess: (data, request) => {
+      setValue((v) =>
+        v.host === request.host &&
+        v.ssh_port === request.ssh_port &&
+        JSON.stringify(v.ssh_jump || null) ===
+          JSON.stringify(request.ssh_jump || null)
+          ? { ...v, fingerprint: data.fingerprint }
+          : v,
+      );
       setTrusted(false);
     },
   });
@@ -65,9 +74,12 @@ export function ServerDialog({
     setValue((s) => ({
       ...s,
       [key]: v,
-      ...(key === "host" || key === "ssh_port" ? { fingerprint: "" } : {}),
+      ...(key === "host" || key === "ssh_port" || key === "ssh_jump"
+        ? { fingerprint: "" }
+        : {}),
     }));
-    if (key === "host" || key === "ssh_port") setTrusted(false);
+    if (key === "host" || key === "ssh_port" || key === "ssh_jump")
+      setTrusted(false);
   }
   const roleIcons = {
     entry: ArrowDownToLine,
@@ -192,7 +204,21 @@ export function ServerDialog({
             <button type="button" className="text-button" onClick={onVault}>
               {t("addCredential")}
             </button>
-            <ErrorMessage error={credentials.error} />
+            <JumpHostSettings
+              value={value.ssh_jump || null}
+              onChange={(jump) => update("ssh_jump", jump)}
+              servers={(inventory.data?.servers || []).filter(
+                (candidate) =>
+                  candidate.id !== value.id &&
+                  !candidate.ssh_jump &&
+                  !(
+                    candidate.host === value.host &&
+                    candidate.ssh_port === value.ssh_port
+                  ),
+              )}
+              credentials={credentials.data || []}
+            />
+            <ErrorMessage error={credentials.error || inventory.error} />
           </>
         )}
         {step === 2 && (
@@ -204,7 +230,13 @@ export function ServerDialog({
             <button
               type="button"
               className="button full"
-              onClick={() => discover.mutate()}
+              onClick={() =>
+                discover.mutate({
+                  host: value.host,
+                  ssh_port: value.ssh_port,
+                  ssh_jump: value.ssh_jump || null,
+                })
+              }
               disabled={discover.isPending}
             >
               {discover.isPending ? <Spinner /> : <KeyRound size={16} />}{" "}
@@ -254,8 +286,10 @@ export function ServerDialog({
             className="button primary"
             disabled={
               pending ||
-              (step === 1 && !value.credential_id) ||
-              (step === 2 && (!trusted || !value.fingerprint))
+              (step === 1 &&
+                (!value.credential_id || !jumpValid(value.ssh_jump))) ||
+              (step === 2 &&
+                (!trusted || !value.fingerprint || !jumpValid(value.ssh_jump)))
             }
           >
             {pending ? <Spinner /> : null}
