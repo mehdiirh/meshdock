@@ -70,7 +70,7 @@ test("renders connected nodes and switches a method through the inspector", asyn
     page.getByRole("heading", { name: "Your network, in motion." }),
   ).toBeVisible();
   await expect(page.locator(".server-node")).toHaveCount(2);
-  await page.getByText("GRE", { exact: true }).click();
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
   await page.getByRole("button", { name: "Rathole", exact: true }).click();
   const saved = page.waitForRequest(
     (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
@@ -101,7 +101,7 @@ test("switches appearance and renders Persian RTL without losing the topology", 
 });
 
 test("preserves full ranges and exceptions when switching methods", async ({ page }) => {
-  await page.getByText("GRE", { exact: true }).click();
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
   await page.getByLabel("Entry port 1", { exact: true }).fill("1023-65535");
   await page.getByLabel("Destination port 1", { exact: true }).fill("1023-65535");
   await page.getByLabel("Excluded entry ports 1", { exact: true }).fill("2222, 8080-8081");
