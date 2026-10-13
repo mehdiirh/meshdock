@@ -1,5 +1,5 @@
 {
-  "appName": "Tunnel Manager",
+  "appName": "MeshDock",
   "workspace": "Workspace",
   "topology": "Topology",
   "vault": "SSH vault",
@@ -138,7 +138,7 @@
   "connectBatchHint": "Select at least one entry and one exit. A connection editor will apply the same settings to each pair.",
   "batch": "Connect {{count}} pairs",
   "selected": "{{count}} selected",
-  "destinationRequired": "Your destination service must already be running. Tunnel Manager installs tunnel infrastructure only.",
+  "destinationRequired": "Your destination service must already be running. MeshDock installs tunnel infrastructure only.",
   "serverChangedTrust": "Changing the SSH endpoint requires a new fingerprint check.",
   "saved": "Saved",
   "cancelled": "Cancelled",

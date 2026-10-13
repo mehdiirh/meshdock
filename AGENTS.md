@@ -1,4 +1,4 @@
-# Tunnel Manager development contract
+# MeshDock development contract
 
 - This is an open-source control plane. Never commit production IPs, hostnames, credentials, private keys, database files, logs, or user topology exports. Use RFC 5737 addresses in examples.
 - Backend lives in backend/, frontend in frontend/. Keep adapters in backend/app/methods; extend the registry rather than adding method-specific branches to API handlers.

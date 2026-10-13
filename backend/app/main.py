@@ -21,7 +21,7 @@ async def lifespan(app):
 
 
 app = FastAPI(
-    title="Tunnel Manager API",
+    title="MeshDock API",
     version="1.0.0",
     lifespan=lifespan,
     docs_url=None,

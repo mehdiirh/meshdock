@@ -45,3 +45,13 @@ The test runner currently emits a Starlette deprecation warning about its httpx 
 - Eight isolated Linux tests passed using Debian-packaged HAProxy 3.0.11 and OpenSSH 10.0p2 in the local Docker test harness. Five were full-range syntax checks, one exercised SSH traffic and its address restriction, one exercised outgoing-port exhaustion, and one rechecked GRE packet forwarding/rollback. These are not full 65K-listener throughput tests of every upstream binary, nor end-to-end systemd provisioning tests.
 - The UI accepted the saved 64,509-port range on Backhaul, Rathole, FRP, Hysteria and reverse SSH. SSH displayed 16 sessions. English/dark and Persian/light layouts were checked; topology revision remained unchanged during these draft-only checks. The deployment preview compacts long port lists and exposes planned resource counts. Ten frontend unit tests and the production build passed. CI browser fixtures now expect capability-based method switching.
 - Mapping storage is unchanged: no schema/DDL migration was necessary. Generated addresses, session groups and resource budgets are derived plan data in immutable generation manifests.
+
+## MeshDock rename — 2026-10-13
+
+- Renamed UI branding in both locale catalogs, login/dashboard labels, browser title, API title, backend/frontend package metadata and lockfiles, image tags, CI examples, setup/backup/dev scripts, and project documentation.
+- Preserved persisted configuration/resource identities and exact package-policy ownership markers so existing installations retain their data and recovery/cleanup behavior. See DECISIONS.md.
+- Backend: 77 passed, 11 opt-in transport/Linux tests skipped. Black and Ruff passed.
+- Frontend: 10 unit tests passed; TypeScript/Vite production build and Prettier passed.
+- All 3 browser tests passed using installed Chrome in an isolated profile. The default Playwright browser was missing and its download returned a regional HTTP 403; a temporary configuration selected Chrome without changing the committed CI browser configuration.
+- Browser checks also verified MeshDock on the login screen and dashboard, English/dark and Persian/light layouts, and browser title. Refreshed documentation screenshots with mocked TEST-NET fixtures; no live server data was used.
+- `uv lock --check --offline`, Docker Compose configuration validation, shell syntax and Git whitespace checks passed. No production hosts were contacted or modified.

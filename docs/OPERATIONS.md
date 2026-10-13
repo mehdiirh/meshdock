@@ -57,8 +57,8 @@ The bundled Compose configuration can be validated without a Docker daemon. Imag
 This opt-in test creates disposable client/entry/exit network namespaces, with no inventory connections. The test container needs privileges to create GRE interfaces and iptables chains, but has no host mounts and no external network at runtime:
 
 ```sh
-docker build -f backend/Dockerfile.network-test -t tunnel-manager-network-test backend
-docker run --rm --privileged --network none tunnel-manager-network-test
+docker build -f backend/Dockerfile.network-test -t meshdock-network-test backend
+docker run --rm --privileged --network none meshdock-network-test
 ```
 
 It exercises full-range boundary ports, the formerly reserved band, exceptions, shifted ranges, restoration of a previous generation, injected partial-rule failure, preservation of unrelated firewall rules, and restoration of interface forwarding settings. It complements the systemd/SSH/host-restart staging checklist above.
@@ -67,7 +67,7 @@ It exercises full-range boundary ports, the formerly reserved band, exceptions, 
 The same isolated image includes full-range HAProxy validators, a 4,097-forward SSH test spanning two sessions, and a Linux source-port exhaustion regression. Run them without external networking or host mounts:
 
 ```sh
-docker run --rm --privileged --network none tunnel-manager-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
+docker run --rm --privileged --network none meshdock-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
 ```
 
 The SSH test adjusts only the disposable container's locked root test account and temporary fixture permissions. It must never run against a production host. The default skip condition requires both explicit opt-in and a container. Full-range runtime throughput/memory sizing still needs staging; a valid large configuration is not a capacity benchmark.

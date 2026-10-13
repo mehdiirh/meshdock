@@ -365,6 +365,7 @@ class Agent:
 
     @property
     def package_policy_text(self):
+        # Stable ownership marker: recovery must recognize policies from older releases.
         return f"#!/bin/sh\n# Tunnel Manager {self.namespace} temporary policy\nexit 101\n"
 
     def recover_package_policy(self, policy=None, lock_path=None):

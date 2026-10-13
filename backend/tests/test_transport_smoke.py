@@ -147,8 +147,8 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
                         ("127.0.0.1", context.internal(index)), timeout=1
                     ) as client:
                         client.settimeout(2)
-                        client.sendall(b"tunnel-manager-roundtrip")
-                        if client.recv(128) != b"tunnel-manager-roundtrip":
+                        client.sendall(b"meshdock-roundtrip")
+                        if client.recv(128) != b"meshdock-roundtrip":
                             raise OSError("Unexpected payload")
                 break
             except OSError:

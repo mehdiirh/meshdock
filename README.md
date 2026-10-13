@@ -1,4 +1,4 @@
-# Tunnel Manager
+# MeshDock
 
 A self-hosted visual control plane for server-to-server TCP tunnels. Arrange servers on a canvas, connect their handles, choose a transport, and follow each deployment in a persistent event stream.
 
@@ -7,6 +7,11 @@ A self-hosted visual control plane for server-to-server TCP tunnels. Arrange ser
 English and Persian, RTL, light and dark themes. No production infrastructure is included. MIT licensed.
 
 ![Interactive demo topology](docs/screenshots/dashboard.png)
+
+MeshDock preserves earlier installation identifiers: `TM_*` configuration,
+`tm-*` managed resources, `/var/lib/tunnel-manager` remote state, and the
+`tunnel-manager` Compose project name. These are compatibility identifiers;
+existing databases, encryption keys, volumes and deployed tunnels stay in place.
 
 ## Run an isolated demo
 
@@ -22,7 +27,7 @@ Open `http://localhost:8080`. The username is `admin`; read the generated passwo
 Point a domain at the control-plane server, then on a fresh checkout:
 
 ```sh
-python3 scripts/setup.py --origin https://manager.example.com
+python3 scripts/setup.py --origin https://meshdock.example.com
 docker compose --profile tls up --build -d
 ```
 

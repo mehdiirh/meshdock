@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate local configuration without overwriting existing secrets."""
+"""Generate MeshDock local configuration without overwriting existing secrets."""
 
 import argparse
 import os
@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 from urllib.parse import urlparse
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description="Generate MeshDock configuration.")
 parser.add_argument("--origin", default="http://localhost:8080")
 parser.add_argument("--demo", action="store_true")
 arguments = parser.parse_args()
@@ -48,4 +48,4 @@ except FileExistsError:
     parser.exit("Configuration already exists; refusing to overwrite .env.\n")
 with os.fdopen(fd, "w") as output:
     output.write(content)
-print("Created .env (owner-only). Read TM_ADMIN_PASSWORD there to sign in as admin.")
+print("Created MeshDock .env (owner-only). Read TM_ADMIN_PASSWORD there to sign in as admin.")

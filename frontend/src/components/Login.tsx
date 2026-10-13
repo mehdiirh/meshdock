@@ -27,9 +27,7 @@ export function Login() {
       <div className="login-art">
         <div className="brand">
           <Waypoints />
-          <span>
-            TUNNEL<span className="brand-light"> / MANAGER</span>
-          </span>
+          <span>{t("appName")}</span>
         </div>
         <div className="orbit orbit-one" />
         <div className="orbit orbit-two" />
@@ -81,7 +79,7 @@ export function Login() {
           </button>
         </form>
         <p className="login-foot">
-          TUNNEL MANAGER <span>© {new Date().getFullYear()}</span>
+          {t("appName")} <span>© {new Date().getFullYear()}</span>
         </p>
       </div>
     </div>

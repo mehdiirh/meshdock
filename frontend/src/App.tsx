@@ -126,9 +126,7 @@ export function App() {
       <main className="main-shell">
         <header className="topbar">
           <div className="brand">
-            <span>
-              TUNNEL<span className="brand-light"> / MANAGER</span>
-            </span>
+            <span>{t("appName")}</span>
             <span className="breadcrumb">/ {t(section)}</span>
           </div>
           <div className="workspace-indicator">

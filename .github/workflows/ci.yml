@@ -15,8 +15,8 @@ jobs:
       - run: cd backend && uv run --no-sync pytest -q
       - name: Verify Linux range configurations and traffic in an isolated container
         run: |
-          docker build -f backend/Dockerfile.network-test -t tunnel-manager-network-test backend
-          docker run --rm --privileged --network none tunnel-manager-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
+          docker build -f backend/Dockerfile.network-test -t meshdock-network-test backend
+          docker run --rm --privileged --network none meshdock-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
       - run: python scripts/setup.py --demo && docker compose config --quiet
   frontend:
     runs-on: ubuntu-latest

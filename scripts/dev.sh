@@ -2,6 +2,7 @@
 set -eu
 usage() {
     cat <<'HELP'
+MeshDock local development
 Usage: ./scripts/dev.sh [--prod]
 
 Default: demo mode; deployments are simulated and never use SSH.
@@ -33,7 +34,7 @@ esac
 # Never share simulated jobs, topology or encrypted credentials with real mode.
 export TM_DATA_DIR="$PWD/.data/$tm_dev_mode"
 export TM_MASTER_KEY_FILE="$TM_DATA_DIR/master.key"
-printf 'Mode: %s (TM_DEMO=%s)\nData: %s\n' "$tm_dev_mode" "$TM_DEMO" "$TM_DATA_DIR"
+printf 'MeshDock — Mode: %s (TM_DEMO=%s)\nData: %s\n' "$tm_dev_mode" "$TM_DEMO" "$TM_DATA_DIR"
 if [ "$tm_dev_mode" = prod ]; then
     printf '%s\n' 'Real deployments enabled: saving tunnel changes can modify your servers.'
 fi

@@ -982,7 +982,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tunnel-manager"
+name = "meshdock"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

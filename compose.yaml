@@ -1,7 +1,9 @@
+# Keep this deployment identity stable to reuse existing containers and volumes.
+# MeshDock branding does not migrate persisted infrastructure identifiers.
 name: tunnel-manager
 x-backend: &backend
   build: ./backend
-  image: tunnel-manager-backend:local
+  image: meshdock-backend:local
   restart: unless-stopped
   volumes: [manager-data:/data]
   environment: &environment
@@ -43,7 +45,7 @@ services:
       start_period: 30s
   web:
     build: ./frontend
-    image: tunnel-manager-web:local
+    image: meshdock-web:local
     restart: unless-stopped
     ports: ['127.0.0.1:${TM_PORT:-8080}:8080']
     depends_on:

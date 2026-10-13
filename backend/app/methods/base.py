@@ -45,7 +45,7 @@ class Context:
         return f"link-{self.link['slot']}"
 
 
-def service(command, description="Tunnel Manager transport", extra="", kind="simple"):
+def service(command, description="MeshDock transport", extra="", kind="simple"):
     return f"""[Unit]
 Description={description}
 After=network-online.target
