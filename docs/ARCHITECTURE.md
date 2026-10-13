@@ -20,8 +20,8 @@ SQLite coordination queries deliberately use explicit short transactions and `BE
 
 1. Implement `Adapter.configure()` in a new `methods/` module. Register its instance in `REGISTRY`. API validation and method discovery consume that registry.
 2. Publish a stable ID, display name, encryption flag, initiation direction, protocols and network requirements. Add localizable caveats when appropriate.
-3. Declare `control_protocol` (`tcp`, `udp` or `None`) and the initiation direction. They drive generic port validation and the UI. Reuse `Context.control`, which honors the optional migrated `control_port`, and deterministic internal ports. Only use `tm-<namespace>-*` units, safe filenames and namespaced paths. No system-wide route changes or edits to existing application configs.
-4. Return files, service units, listener reservations, firewall rules and health targets. Bind intermediary listeners to loopback or owned overlay addresses, not the whole Internet.
+3. Declare `control_protocol` (`tcp`, `udp` or `None`) and the initiation direction. They drive generic port validation and the UI. Reuse `Context.control`, which honors the optional migrated `control_port`, and the allocated `Context.internal()` / `Context.auxiliary()` ports. Declare `max_expanded_ports`, `native_ranges`, the internal bind address/side, and additional listener requirements. Implement `kernel_mapping()` and `validate_mappings()` when the adapter has a native range path. Only use `tm-<namespace>-*` units, safe filenames and namespaced paths. No system-wide route changes or edits to existing application configs.
+4. Return files, service units, address/protocol/port bindings, firewall rules and health targets. Override `bindings()` if the standard control/loopback binding layout does not apply. Bind intermediary listeners to loopback or owned overlay addresses, not the whole Internet.
 5. Pin upstream binary version, download URL and SHA-256 for each supported architecture in `artifacts.py`. The helper extracts a specific file, never arbitrary archive paths.
 6. Store new private material encrypted. Support older link-secret dictionaries when adding fields. Never return secrets in method metadata, plans, errors or exports.
 7. Add compiler tests, real-binary loopback tests and isolated Linux provisioning tests before declaring production validation. The shared worker provides retries and rollback; adapters must not bypass it.
@@ -41,3 +41,7 @@ Preparing a host may install shared packages. Those installations cannot be atom
 Backend event/error codes are stable identifiers translated by gettext from `app/locales/{en,fa}/LC_MESSAGES/messages.po`; compile with `compile_locales.py`. Frontend uses react-i18next and `src/locales/{en,fa}.json`. Missing keys are test failures. Addresses, keys and code are isolated LTR inside Persian layouts.
 
 Use Black for Python formatting, Ruff for correctness/import checks and Prettier for frontend formatting. Keep protocol strings in adapters, secrets in the vault, and operational state in durable jobs.
+
+## Mapping compiler
+
+`ports.py` parses and splits compact range intent while retaining target offsets. `allocation.py` derives control and intermediate listener allocations per snapshot, bind address and server. Socket adapters receive bounded expanded mappings; native adapters receive compact intent. `gre_forwarding.py` generates namespaced kernel rules. Capability metadata drives frontend validation; API handlers do not branch on method IDs. See [PORT-MAPPINGS.md](PORT-MAPPINGS.md).

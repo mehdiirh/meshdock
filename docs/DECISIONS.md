@@ -5,7 +5,7 @@ Proceeding without blocking questions, as requested.
 - Linux targets: Debian/Ubuntu with systemd, root SSH, IPv4 transport addresses. Other operating systems are rejected before activation.
 - Initial traffic contract: TCP forwarding. UDP and IPv6 tunnel addressing are not silently emulated; they require future adapters and capability validation.
 - Entry/exit are general-purpose roles (Iran/kharej are deployment examples, never hardcoded).
-- One control-plane installation owns one topology. Many entry servers can connect to many exit servers. Shared entry ports form pools; pool policy is round-robin, least-connections, or ordered failover.
+- One control-plane installation owns one topology. Many entry servers can connect to many exit servers. Shared entry ports in socket-based connections form pools; native GRE ranges require exclusive intervals; pool policy is round-robin, least-connections, or ordered failover.
 - Changes queue reconciliation immediately. Workers serialize deployment generations, coalesce obsolete queued revisions, retry transient failures, and retain rollback/recovery information.
 - Secrets are encrypted with a separate persistent master key. Back up the database AND key; losing the key loses access to encrypted credentials.
 - Password login is for administrators; programmatic clients use revocable, scoped Bearer API keys. Browser sessions use HttpOnly cookies plus CSRF protection.
@@ -15,3 +15,7 @@ Proceeding without blocking questions, as requested.
 - No existing real servers are imported or changed by development or demos.
 
 Questions for later: preferred public domain/TLS termination; multi-tenant workspaces and non-admin roles; UDP priorities; IPv6; desired retention and alert integrations; hardware scale targets and provider firewall integration.
+
+- Port range limits are explicit application limits: 512 expanded ports for Backhaul, Rathole, FRP and Hysteria; 64 for reverse SSH; full port space for native GRE, subject to exclusions and conflicts. These limits can evolve through adapter metadata and validation.
+- Large GRE ranges use Linux kernel forwarding. Socket adapters retain HAProxy pools. Mixed single/range GRE connections use the kernel path for every row and cannot share those public ports with another connection.
+- Internal allocations belong to immutable deployment manifests, not a globally reserved public band. Existing compact JSON storage supports range intent without schema mutation; startup/migration preservation is tested.

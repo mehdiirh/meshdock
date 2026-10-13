@@ -85,7 +85,7 @@ msgid "remote_failed"
 msgstr "A remote operation failed. See the deployment phase."
 
 msgid "reserved_port"
-msgstr "This port is reserved for management or tunnel internals (20000–60999)."
+msgstr "The port conflicts with a management or transport listener. Check the current mappings."
 
 msgid "retrying"
 msgstr "Retry scheduled."

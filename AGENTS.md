@@ -17,3 +17,5 @@
 - Backend dependencies and environments MUST use uv: maintain pyproject.toml and commit uv.lock, run uv sync --frozen. Frontend server state MUST use TanStack React Query. Frontend internationalization MUST use i18next/react-i18next with locale JSON files.
 
 - Backend code MUST pass Black formatting. Use descriptive names, focused modules, explicit error boundaries, and shared helpers for repeated behavior; avoid compressed one-line control flow.
+
+- Mapping intent is compact and transport-neutral: integer/range ports plus explicit entry-port exceptions. Preserve destination offsets. Capabilities and expansion limits belong to adapters, not API method-ID branches. No blanket public-port reservation bands. Bindings must declare address, protocol and port, and remote preflight must check actual listeners. Keep GRE rules namespaced, journal interface changes, and exercise the opt-in isolated Linux packet test when changing native forwarding.

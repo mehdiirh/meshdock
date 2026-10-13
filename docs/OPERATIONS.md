@@ -6,7 +6,7 @@ Use two disposable Debian/Ubuntu systemd VMs with reachable root SSH and a simpl
 
 Create one connection, verify real application traffic, then test: changing a destination; switching methods; adding a second entry and a second exit; sharing a public port; disabling/removing an edge; stopping a destination; interrupting the worker during activation; blocking SSH during rollback; restoring access and retrying recovery; restarting each VM; and cleanup. Measure throughput and latency from actual client networks separately.
 
-The manager reserves TCP ports 20000–60999 for transport listeners and maps public application ports outside that range. Optional transport control ports can be selected outside that range, including 443 when free; listener conflicts and management SSH conflicts are rejected. TCP and UDP port spaces are validated separately. GRE uses a private /30 from 10.253.0.0/16 per link. The current implementation supports up to 500 inventory servers and 1000 link slots; it is not a benchmarked capacity guarantee. Slot reuse excludes applied and in-flight generations. Avoid overlapping private networks, multiple managers on one host, or independent firewall controllers that rewrite INPUT chains.
+Public ports have no blanket reserved band. Use integer ports or equal-width ranges with explicit entry-port exceptions. GRE ranges use kernel forwarding; other adapters expand ranges within their published application limits. Management SSH, topology overlaps, control listeners, and live server bindings are checked. TCP and UDP port spaces and bind addresses are validated separately. See [PORT-MAPPINGS.md](PORT-MAPPINGS.md) for limits, ownership, cleanup and method-switch behavior. GRE uses a private /30 from 10.253.0.0/16 per link. The current implementation supports up to 500 inventory servers and 1000 link slots; it is not a benchmarked capacity guarantee. Slot reuse excludes applied and in-flight generations. Avoid overlapping private networks, multiple managers on one host, or independent firewall controllers that rewrite INPUT chains.
 
 ## Ownership
 
@@ -51,3 +51,14 @@ Management SSH must be reachable from the **controller**, even when intentionall
 ## Local verification limitations
 
 The bundled Compose configuration can be validated without a Docker daemon. Image builds and Linux systemd/firewall integration require a functioning daemon or staging VMs. Neither a simulated worker nor local loopback transport tests prove production kernel/firewall behavior or national-filtering reachability.
+
+## Isolated GRE packet test
+
+This opt-in test creates disposable client/entry/exit network namespaces, with no inventory connections. The test container needs privileges to create GRE interfaces and iptables chains, but has no host mounts and no external network at runtime:
+
+```sh
+docker build -f backend/Dockerfile.network-test -t tunnel-manager-network-test backend
+docker run --rm --privileged --network none tunnel-manager-network-test
+```
+
+It exercises full-range boundary ports, the formerly reserved band, exceptions, shifted ranges, restoration of a previous generation, injected partial-rule failure, preservation of unrelated firewall rules, and restoration of interface forwarding settings. It complements the systemd/SSH/host-restart staging checklist above.

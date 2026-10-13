@@ -37,7 +37,7 @@ AmneziaWG modifies WireGuard traffic characteristics but still relies on UDP. It
 
 ## Operational boundaries
 
-All current adapters expose **TCP application mappings**, even if their underlying transport uses UDP. IPv4 is required. Existing destination services must already be running. Provider-level firewalls and upstream allowlists are outside the controller. Switching methods can disconnect active sessions. New connections use health-checked HAProxy pools; failover cannot migrate an already established TCP session.
+All current adapters expose **TCP application mappings**, even if their underlying transport uses UDP. IPv4 is required. Socket-mapped destination services must already be running; native GRE ranges check the tunnel peer and permit closed destination ports. See [Port mappings](PORT-MAPPINGS.md) for per-adapter ranges and exclusions. Provider-level firewalls and upstream allowlists are outside the controller. Switching methods can disconnect active sessions. Socket-based connections use health-checked HAProxy pools; native GRE ranges require exclusive public intervals; failover cannot migrate an already established TCP session.
 
 Per-link TLS identities last ten years and are private to the installation. They authenticate peers without disabling verification; they are not public web certificates. Recreating the connection rotates its identity. Review validity and rotate before expiration. Never export secrets in topology previews or logs.
 

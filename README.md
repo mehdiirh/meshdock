@@ -35,9 +35,11 @@ The initial password is only used to create the first administrator. Changing `.
 1. Store a root password or SSH private key in the vault. Keys may include a passphrase and be reused by several servers.
 2. Add entry and exit servers. The management host can differ from the public transport IPv4 address. Discover and independently verify the SSH host fingerprint.
 3. Drag a line from an entry's right handle to an exit's left handle. Configure public and destination ports, select a method, optionally select a free transport port such as 443, and save. Deployment is queued immediately.
-4. Several connections using the same entry port form a shared HAProxy pool. Choose round robin, least connections, or ordered failover. Shift-select several entries and exits, then use “Connect selected” for a many-to-many batch.
+4. Socket-based connections using the same entry port form a shared HAProxy pool; native GRE ranges require exclusive intervals. Choose round robin, least connections, or ordered failover. Shift-select several entries and exits, then use “Connect selected” for a many-to-many batch.
 5. Click an edge to switch methods, or drag its endpoint to another server. Edit a server to replace its host. The old host stays in the reconciliation plan until its managed resources are removed.
 6. Open Deployments for persisted, live events. A failed update restores the preceding generation where hosts are reachable. Recovery-required state blocks further changes until rollback can finish.
+
+Port mappings accept equal-width ranges and explicit exceptions. Limits and conflict checks depend on the selected adapter; see [Port mappings](docs/PORT-MAPPINGS.md).
 
 Moving cards only saves layout; it does not deploy. A green revision means the last deployment passed checks, not continuous uptime certification. HAProxy checks continue to steer new connections away from unhealthy backends.
 
@@ -51,7 +53,7 @@ Current scope is Debian/Ubuntu with systemd, root SSH, IPv4 endpoints and TCP ap
 
 The worker prepares owned generation directories, validates configuration, activates services, checks destinations, then records the applied revision. It has durable receipts, bounded retries, a renewable database lease and monotonic remote fencing epochs. A controller restart compensates an interrupted job before advancing the queue.
 
-Local file-pointer swaps are atomic. **Cross-host activation is not a distributed atomic transaction**, and switching methods can interrupt active TCP connections. A failed or unreachable rollback is visible and blocks new changes. Shared package installation is not undone on rollback. Never assume a tunnel is healthy solely because a process starts: current checks cover service state and TCP reachability, not the end user's application protocol or an ISP-specific throughput benchmark.
+Local file-pointer swaps are atomic. **Cross-host activation is not a distributed atomic transaction**, and switching methods can interrupt active TCP connections. A failed or unreachable rollback is visible and blocks new changes. Shared package installation is not undone on rollback. Never assume a tunnel is healthy solely because a process starts: current checks cover service state, TCP destination reachability for socket adapters, and inner GRE peer reachability for native ranges, not the end user's application protocol or an ISP-specific throughput benchmark.
 
 “Clean up tunnels” disables connections and removes managed units, interfaces and firewall rules. Recent generation files remain for recovery; [operations documentation](docs/OPERATIONS.md) describes the explicit full-removal pipeline.
 
