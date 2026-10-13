@@ -199,5 +199,70 @@
   "sshSessionCount_other": "{{count}} SSH sessions · up to {{size}} forwards per session",
   "rangeHealthHint": "Ranges check all tunnel listeners, not every destination service. You can start services later. Pool health samples the transport; it does not detect individual destination outages.",
   "resourcePlan": "{{count}} planned listening sockets · per-process file limit {{nofile}} · estimated descriptor budget {{budget}}. Live limits are checked before deployment; memory and throughput still depend on the server.",
-  "outgoingPortHint": "The server also needs free ports for outgoing TCP connections. If a large range consumes that space on its egress IP, deployment asks for explicit exceptions or a separate ingress IP."
+  "outgoingPortHint": "The server also needs free ports for outgoing TCP connections. If a large range consumes that space on its egress IP, deployment asks for explicit exceptions or a separate ingress IP.",
+  "advanced": {
+    "title": "Advanced settings",
+    "defaults": "Defaults",
+    "reset": "Restore defaults",
+    "on": "On",
+    "off": "Off",
+    "default": "Default: {{value}}",
+    "range": "Allowed: {{min}}–{{max}}",
+    "deployHint": "Changes apply when you save. Both ends are updated; active connections may reconnect.",
+    "switchHint": "Each method keeps its own draft while this panel is open. Only the selected method’s settings are saved.",
+    "invalid": "Check numeric limits and dependent settings. Buffer sizes must fit their parent buffer, and heartbeat/keepalive intervals must be shorter than their timeout.",
+    "scope": {
+      "both": "Both ends",
+      "server": "Tunnel server",
+      "client": "Tunnel client"
+    },
+    "units": {
+      "seconds": "seconds",
+      "bytes": "bytes"
+    },
+    "methods": {
+      "backhaul": "Choose TCP or WebSocket, with optional multiplexing. These modes are unencrypted. Mux controls appear only for mux transports.",
+      "gre": "Adjust packet size and IP headers on both GRE interfaces. MTU must also fit your network path; a lower value can help avoid fragmentation.",
+      "rathole": "Tune TCP behavior and connection recovery. Noise encryption and managed keys remain enabled.",
+      "reverse_ssh": "Tune the managed SSH client. Host verification stays enabled; your management SSH daemon is not changed.",
+      "frp_wss": "Tune pooling, multiplexing, and heartbeat behavior. Transport remains WSS with verified, managed TLS.",
+      "hysteria2": "Tune QUIC receive windows, timers, and optional Salamander obfuscation. TLS verification stays enabled. Larger buffers consume more memory."
+    },
+    "fields": {
+      "transport": "Transport",
+      "nodelay": "TCP no-delay",
+      "keepalive_period": "Keepalive interval",
+      "heartbeat": "Heartbeat interval",
+      "channel_size": "Channel capacity",
+      "connection_pool": "Connection pool",
+      "aggressive_pool": "Aggressive pooling",
+      "dial_timeout": "Connection timeout",
+      "retry_interval": "Retry interval",
+      "mux_con": "Mux concurrency",
+      "mux_version": "Mux protocol version",
+      "mux_framesize": "Mux frame size",
+      "mux_recievebuffer": "Mux receive buffer",
+      "mux_streambuffer": "Mux stream buffer",
+      "mtu": "Tunnel MTU",
+      "ttl": "Packet TTL (0 inherits)",
+      "tos": "Type of service",
+      "keepalive_secs": "TCP keepalive delay",
+      "keepalive_interval": "TCP keepalive probe interval",
+      "heartbeat_interval": "Heartbeat interval",
+      "heartbeat_timeout": "Heartbeat timeout",
+      "server_alive_interval": "SSH keepalive interval",
+      "server_alive_count_max": "Missed SSH keepalives",
+      "connect_timeout": "SSH connection timeout",
+      "compression": "SSH compression",
+      "tcp_keepalive": "TCP keepalive",
+      "tcp_mux": "TCP multiplexing",
+      "tcp_mux_keepalive": "Mux keepalive interval",
+      "pool_count": "Pre-established connections",
+      "obfuscation": "Salamander obfuscation",
+      "stream_receive_window": "Stream receive window",
+      "connection_receive_window": "Connection receive window",
+      "max_idle_timeout": "Maximum idle time",
+      "disable_path_mtu_discovery": "Disable path MTU discovery"
+    }
+  }
 }

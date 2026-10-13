@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import methods from "./fixtures/methods.json" with { type: "json" };
 const a = "a".repeat(32),
   b = "b".repeat(32),
   edge = "c".repeat(32);
@@ -52,10 +53,7 @@ test.beforeEach(async ({ page }) => {
       "/api/v1/auth/me": { username: "admin", csrf: "fixture", demo: true },
       "/api/v1/topology": topology,
       "/api/v1/jobs": [],
-      "/api/v1/methods": [
-        { id: "gre", name: "GRE", encrypted: false, mapping: { native_ranges: true, max_ports: 65535, max_listener_ports: 65535 } },
-        { id: "rathole", name: "Rathole", encrypted: true, mapping: { native_ranges: false, max_ports: 65535, max_listener_ports: 65535 } },
-      ],
+      "/api/v1/methods": methods,
     };
     if (route.request().method() === "PUT")
       return route.fulfill({ json: { revision: 2, job_id: "job" } });
@@ -100,17 +98,114 @@ test("switches appearance and renders Persian RTL without losing the topology", 
   await expect(page.locator(".server-node")).toHaveCount(2);
 });
 
-test("preserves full ranges and exceptions when switching methods", async ({ page }) => {
+test("preserves full ranges and exceptions when switching methods", async ({
+  page,
+}) => {
   await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
   await page.getByLabel("Entry port 1", { exact: true }).fill("1023-65535");
-  await page.getByLabel("Destination port 1", { exact: true }).fill("1023-65535");
-  await page.getByLabel("Excluded entry ports 1", { exact: true }).fill("2222, 8080-8081");
-  await expect(page.getByText("64510 TCP ports", { exact: true })).toBeVisible();
+  await page
+    .getByLabel("Destination port 1", { exact: true })
+    .fill("1023-65535");
+  await page
+    .getByLabel("Excluded entry ports 1", { exact: true })
+    .fill("2222, 8080-8081");
+  await expect(
+    page.getByText("64510 TCP ports", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Rathole", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(page.getByText("Individual transport listeners · capacity checked on the server")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save & deploy", exact: true })).toBeEnabled();
-  const saved = page.waitForRequest(r => r.method() === "PUT" && r.url().endsWith("/topology"));
-  await page.getByRole("button", { name: "Save & deploy", exact: true }).click();
-  expect((await saved).postDataJSON().links[0].ports[0]).toEqual({ public: "1023-65535", target: "1023-65535", host: "127.0.0.1", exclude: ["2222", "8080-8081"] });
+  await expect(
+    page.getByText(
+      "Individual transport listeners · capacity checked on the server",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeEnabled();
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await page
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  expect((await saved).postDataJSON().links[0].ports[0]).toEqual({
+    public: "1023-65535",
+    target: "1023-65535",
+    host: "127.0.0.1",
+    exclude: ["2222", "8080-8081"],
+  });
+});
+
+test("advanced options validate, keep method drafts, and deploy only selected settings", async ({
+  page,
+}) => {
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
+  const save = page.getByRole("button", { name: "Save & deploy", exact: true });
+  await page
+    .getByRole("spinbutton", { name: "Tunnel MTU", exact: true })
+    .fill("100");
+  await expect(save).toBeDisabled();
+  await page
+    .getByRole("spinbutton", { name: "Tunnel MTU", exact: true })
+    .fill("1300");
+  await expect(save).toBeEnabled();
+  await page.getByRole("button", { name: "Backhaul", exact: true }).click();
+  await page.getByRole("button", { name: "tcpmux", exact: true }).click();
+  await page
+    .getByRole("spinbutton", { name: "Mux receive buffer", exact: true })
+    .fill("8388608");
+  await page.getByRole("button", { name: "GRE", exact: true }).click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Tunnel MTU", exact: true }),
+  ).toHaveValue("1300");
+  await page.getByRole("button", { name: "Backhaul", exact: true }).click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toHaveValue("8388608");
+  await page.locator(".inspector").evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.screenshot({
+    path: test.info().outputPath("advanced-settings.png"),
+  });
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await save.click();
+  expect((await saved).postDataJSON().links[0].settings).toEqual({
+    transport: "tcpmux",
+    mux_recievebuffer: 8388608,
+  });
+});
+
+test("advanced settings support Persian, defaults, and conditional controls", async ({
+  page,
+}) => {
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
+  await page.getByRole("button", { name: "Backhaul", exact: true }).click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "tcpmux", exact: true }).click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Restore defaults", exact: true })
+    .click();
+  await expect(
+    page.getByRole("spinbutton", { name: "Mux receive buffer", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Change language", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(
+    page.getByText("تنظیمات پیشرفته", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("advanced-settings-persian.png"),
+  });
 });

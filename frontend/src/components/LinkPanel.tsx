@@ -12,7 +12,15 @@ import {
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { mappingStatus } from "../ports";
-import type { Link, Server, MethodInfo, Policy } from "../types";
+import type {
+  Link,
+  Server,
+  MethodInfo,
+  Policy,
+  MethodSettings,
+} from "../types";
+import { settingsValid } from "../methodSettings";
+import { AdvancedSettings } from "./AdvancedSettings";
 import { Field, ErrorMessage, Spinner } from "./Primitives";
 export function LinkPanel({
   link,
@@ -35,6 +43,9 @@ export function LinkPanel({
 }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(link);
+  const [methodDrafts, setMethodDrafts] = useState<
+    Record<string, MethodSettings>
+  >({});
   const [exclusions, setExclusions] = useState(
     link.ports.map((p) => (p.exclude || []).join(", ")),
   );
@@ -43,6 +54,7 @@ export function LinkPanel({
     queryFn: () => api<MethodInfo[]>("/methods"),
   });
   const method = methods.data?.find((m) => m.id === value.method);
+  const validSettings = settingsValid(method?.settings_schema, value.settings);
   const status = mappingStatus(
     value.ports,
     method,
@@ -70,7 +82,7 @@ export function LinkPanel({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!status.error && method) onSave(value);
+          if (!status.error && method && validSettings) onSave(value);
         }}
       >
         <div className="route-preview">
@@ -85,13 +97,19 @@ export function LinkPanel({
                 type="button"
                 className={value.method === m.id ? "active" : ""}
                 key={m.id}
-                onClick={() =>
+                onClick={() => {
+                  if (value.method === m.id) return;
+                  setMethodDrafts((drafts) => ({
+                    ...drafts,
+                    [value.method]: value.settings || {},
+                  }));
                   setValue((v) => ({
                     ...v,
                     method: m.id,
+                    settings: methodDrafts[m.id] || {},
                     control_port: m.control_protocol ? v.control_port : null,
-                  }))
-                }
+                  }));
+                }}
               >
                 {m.encrypted ? <ShieldCheck size={16} /> : <Radio size={16} />}
                 <span>{m.name}</span>
@@ -108,6 +126,16 @@ export function LinkPanel({
             {t("caveats." + method.caveat)}
           </p>
         )}
+        {method && (
+          <AdvancedSettings
+            method={method}
+            settings={value.settings || {}}
+            onChange={(settings) =>
+              setValue((current) => ({ ...current, settings }))
+            }
+          />
+        )}
+        <p className="small muted">{t("advanced.switchHint")}</p>
         {method?.control_protocol && (
           <Field label={t("controlPort")}>
             <input
@@ -356,7 +384,7 @@ export function LinkPanel({
           <p>{t("deploymentHint")}</p>
           <button
             className="button primary full"
-            disabled={pending || !!status.error || !method}
+            disabled={pending || !!status.error || !method || !validSettings}
           >
             {pending ? <Spinner /> : <Save size={16} />} {t("save")}
           </button>

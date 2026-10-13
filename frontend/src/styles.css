@@ -1872,3 +1872,108 @@ fieldset.field legend {
   line-height: 1.6;
   margin: 0 0 12px;
 }
+.advanced-settings {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-block: 16px;
+}
+.advanced-settings summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.advanced-count {
+  margin-inline-start: auto;
+  font-size: 11px;
+  opacity: 0.65;
+}
+.advanced-content {
+  padding: 0 14px 14px;
+  animation: advanced-reveal 0.18s ease-out;
+}
+.advanced-option {
+  margin-block-start: 14px;
+}
+.advanced-option small {
+  display: block;
+  margin-block-start: 4px;
+}
+.advanced-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.advanced-choices button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 7px 12px;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.advanced-choices button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.advanced-choices button:active {
+  transform: scale(0.96);
+}
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 5px 0;
+}
+.advanced-toggle span {
+  display: block;
+  width: 32px;
+  height: 18px;
+  border-radius: 20px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.18s;
+}
+.advanced-toggle span::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  top: 3px;
+  left: 3px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.18s;
+}
+.advanced-toggle[aria-checked="true"] span {
+  background: var(--accent);
+}
+.advanced-toggle[aria-checked="true"] span::after {
+  transform: translateX(14px);
+}
+@keyframes advanced-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .advanced-content {
+    animation: none;
+  }
+  .advanced-settings * {
+    transition: none;
+  }
+}

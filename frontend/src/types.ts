@@ -29,6 +29,30 @@ export interface Link {
   ports: Port[];
   policy: Policy;
   weight: number;
+  settings?: MethodSettings;
+}
+export type SettingValue = string | number | boolean;
+export type MethodSettings = Record<string, SettingValue>;
+export type SettingCondition = Record<string, SettingValue[]>;
+export interface SettingField {
+  type: "integer" | "boolean" | "string";
+  default: SettingValue;
+  enum?: SettingValue[];
+  minimum?: number;
+  maximum?: number;
+  scope: "server" | "client" | "both";
+  unit?: string;
+  when?: SettingCondition;
+}
+export interface SettingsSchema {
+  version: number;
+  properties: Record<string, SettingField>;
+  rules: {
+    left: string;
+    right: string;
+    operator: "lt" | "lte";
+    when?: SettingCondition;
+  }[];
 }
 export interface Topology {
   revision: number;
@@ -64,6 +88,7 @@ export interface MethodInfo {
   priority?: number;
   score?: number;
   caveat?: string;
+  settings_schema?: SettingsSchema;
 }
 export interface Job {
   id: string;
