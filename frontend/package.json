@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "screenshots": "node scripts/screenshots.mjs",
     "format": "prettier --write src",
     "format:check": "prettier --check src"
   },
