@@ -85,6 +85,21 @@ def test_shared_entry_preserves_unchanged_gre_during_apply_and_rollback(
         for cmd in commands
     )
 
+    if native:
+        updated = agent.manifest(generations[0])
+        script = next(name for name in updated["files"] if name.endswith("-gre.sh"))
+        updated["files"][script] = updated["files"][script].replace("mtu 1400", "mtu 1300")
+        third = agent.generation("3" * 32)
+        third.mkdir()
+        atomic_json(third / "manifest.json", updated)
+        commands.clear()
+        agent.switch(third)
+        assert ["network_down"] in commands
+        assert any(
+            cmd[:2] == ["systemctl", "start"] and cmd[-1].endswith("-network.service")
+            for cmd in commands
+        )
+
 
 def test_unit_signature_tracks_referenced_tls_material(tmp_path):
     agent = Agent("a" * 10, root=tmp_path)

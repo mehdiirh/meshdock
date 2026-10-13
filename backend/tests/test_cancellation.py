@@ -122,7 +122,9 @@ def test_cancel_with_unreachable_rollback_requires_recovery(admin):
     assert worker.claim() is None
 
 
-def test_cancel_migration_is_repeatable_and_failure_atomic(environment, monkeypatch):
+def test_cancel_migration_is_repeatable_and_failure_atomic(admin, monkeypatch):
+    seeded(admin)
+    job_id = admin.get("/api/v1/jobs").json()[0]["id"]
     command.downgrade(configuration(), "6f3c98a12d04")
     upgrade = command.upgrade
 
@@ -141,6 +143,10 @@ def test_cancel_migration_is_repeatable_and_failure_atomic(environment, monkeypa
     migrate()
     with connect() as db:
         assert "cancel_requested" in {r[1] for r in db.execute("PRAGMA table_info(jobs)")}
+        row = db.execute(
+            "SELECT status,cancel_requested FROM jobs WHERE id=?", (job_id,)
+        ).fetchone()
+        assert tuple(row) == ("queued", 0)
 
 
 def test_cancel_requires_admin_scope(admin):
