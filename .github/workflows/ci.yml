@@ -17,7 +17,7 @@ jobs:
         run: |
           docker build -f backend/Dockerfile.network-test -t meshdock-network-test backend
           docker run --rm --privileged --network none meshdock-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
-      - run: python scripts/setup.py --demo && docker compose config --quiet
+      - run: python scripts/setup.py --demo && python scripts/start.py --check
   frontend:
     runs-on: ubuntu-latest
     steps:

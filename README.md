@@ -64,11 +64,11 @@ MeshDock sets up and operates the tunnel and forwarding between those servers. Y
 
 ### Try the demo with Docker
 
-You need **Docker with Compose v2** and **Python 3** for the configuration generator. Download or clone this repository, open a terminal in its root directory, then run:
+You need **Docker with Compose v2** and **Python 3** for setup and startup validation. Download or clone this repository, open a terminal in its root directory, then run:
 
 ```sh
 python3 scripts/setup.py --demo
-docker compose -p meshdock-demo up --build -d
+python3 scripts/start.py -p meshdock-demo
 ```
 
 1. Open **[localhost:8080](http://localhost:8080)** on the machine running Docker.
@@ -193,7 +193,7 @@ On a **fresh checkout with no `.env`**, replace the example domain and run:
 
 ```sh
 python3 scripts/setup.py --origin https://meshdock.example.com
-docker compose --profile tls up --build -d
+python3 scripts/start.py --profile tls
 ```
 
 Open your domain and sign in using the generated credentials in `.env`. Omitting `--demo` enables real deployments. Caddy obtains the TLS certificate; API and worker are not published directly. The web service also listens on controller loopback at port 8080 for use behind your own reverse proxy.
@@ -215,6 +215,20 @@ Use the generator for a unique password. [sample.env](sample.env) documents manu
 | `MESHDOCK_PORT` | Local web port in Docker; defaults to `8080`. |
 
 The admin variables initialize a new database only. Change an existing password in **Access & activity**; editing `.env` does not reset it. Keep `.env`, private keys, database files, backups, and real infrastructure details out of Git.
+
+### Validate before starting Docker
+
+Use `python3 scripts/start.py` to build and start the stack. It first asks Compose to resolve the configuration, then checks that the API's administrator password contains at least 12 characters. A missing or short password produces a clear error before any image is built or container is started. Passwords and rendered configuration are never printed.
+
+```sh
+python3 scripts/start.py --check          # Validate only; do not start containers
+python3 scripts/start.py                 # Validate, build, and start in the background
+python3 scripts/start.py --no-build      # Validate and start existing images
+```
+
+The launcher supports `-p` / `--project-name`, repeatable `--env-file`, and repeatable `--profile` options, including `--profile tls`. It preserves your configured demo/real mode. Compose resolves environment-file quoting and interpolation; an exported shell variable takes precedence over `.env`. If a short shell password overrides a valid file value, update it or run `unset MESHDOCK_ADMIN_PASSWORD` before retrying.
+
+The password check runs on every launch, including existing installations, but never changes an existing account's password. Direct `docker compose up` bypasses this preflight: Compose itself cannot enforce a minimum password length, so the API retains its own first-start validation as a fallback. Existing containers are not stopped by a failed preflight.
 
 ## Operations and recovery
 
