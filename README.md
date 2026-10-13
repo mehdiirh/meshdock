@@ -9,7 +9,7 @@ Draw connections, choose a transport, and follow deployments from one visual das
 
 **6 tunnel methods · English & فارسی · Light & dark mode · MIT licensed**
 
-[Quick start](#quick-start) · [Screenshots](#screenshots) · [Your first tunnel](#your-first-tunnel) · [Deploy](#deploy-with-https) · [Documentation](#documentation)
+[Quick start](#quick-start) · [What MeshDock manages](#what-meshdock-installs-and-manages) · [Screenshots](#screenshots) · [Your first tunnel](#your-first-tunnel) · [Deploy](#deploy-with-https) · [Documentation](#documentation)
 
 </div>
 
@@ -28,6 +28,37 @@ MeshDock brings your server inventory, tunnel configuration, SSH credentials, an
 - **Follow deployments.** See persisted deployment events, retry failures, and recover the previous configuration when activation fails.
 - **Automate through the API.** Administrators sign in with a username and password; integrations use scoped Bearer API keys.
 - **Work in your language and theme.** English and Persian, full RTL layout, and light and dark appearances are included.
+
+## What MeshDock installs and manages
+
+**MeshDock installs and configures the tunnel infrastructure, including its own server-side firewall and forwarding rules.** You do not need to install or configure Backhaul, Rathole, FRP, Hysteria, or GRE tunnels before adding your servers. You can start with fresh supported servers that already have working root SSH access.
+
+In **real mode**, saving a connection queues a deployment. MeshDock connects over SSH, prepares the required software and configuration, starts its managed services, and checks the result. In **demo mode**, these actions are simulated.
+
+| Component | MeshDock's responsibility |
+| --- | --- |
+| **Tunnel software** | Downloads and verifies required Backhaul, Rathole, FRP, or Hysteria binaries for the selected method. Installs supporting packages, including OpenSSH tools for reverse SSH. |
+| **GRE** | Uses Linux's GRE support to create and configure tunnel interfaces, addresses, MTU, and the forwarding setup. GRE is a kernel feature, rather than a separate downloaded tunnel program. |
+| **Dependencies and helper** | Installs required system packages and a small remote helper. Configures its own HAProxy services where the selected mapping needs proxy listeners or traffic distribution. |
+| **Server-side networking** | Adds and manages its own firewall chains and rules inside the servers. Configures listeners, port forwarding, and NAT/forwarding rules where the method requires them. |
+| **Service lifecycle** | Creates and starts managed systemd services, applies connection and method changes, records deployment events, checks activation, and attempts rollback if deployment fails. |
+| **Cleanup** | Removes its managed tunnel services, interfaces, and firewall rules when requested. Shared packages and recovery files are retained; see [full removal](docs/OPERATIONS.md#cleanup-and-full-removal). |
+
+### What you prepare yourself
+
+- **Servers and access:** provide supported Debian/Ubuntu servers with systemd, root SSH credentials, and management connectivity from the controller. Verify their SSH fingerprints. The servers also need access to package repositories and the selected software's download sources during installation.
+- **The destination application:** install and configure the application that receives the forwarded traffic, such as **Xray managed by 3x-ui**, a web server, or another TCP service. Tell MeshDock its destination host and port. MeshDock handles the tunnel; your application handles its users, authentication, and application-level routing.
+- **Network controls outside the servers:** allow the chosen transport and required application traffic through your provider's firewall/security groups. Arrange any required NAT or port forwarding on an upstream router. MeshDock currently has no integration for changing those external controls.
+
+**Server firewall rules and provider firewall rules are different layers.** MeshDock changes its own rules inside the managed Linux servers. A hosting provider's security group can still block packets before they reach those rules.
+
+For example, if Xray already listens on port `8443` on your Turkey server, you can map port `443` on your Iran server to it:
+
+```text
+VPN client → Iran:443 → MeshDock-managed tunnel → Turkey's Xray service:8443
+```
+
+MeshDock sets up and operates the tunnel and forwarding between those servers. You maintain Xray/3x-ui and its client accounts. Existing Xray routing, unrelated Nginx sites, management SSH daemon settings, and default routes stay under your control while MeshDock adds the resources it owns.
 
 ## Quick start
 
@@ -116,7 +147,7 @@ There are three roles to understand:
 | **Entry server** | Accepts your users' application connections. |
 | **Exit server** | Reaches the destination service, such as an existing proxy or web service. |
 
-For example, users can connect to an entry server in Iran while an exit server in Turkey forwards those connections to your existing service. MeshDock manages the tunnel infrastructure; your destination application must already be installed and running.
+For example, users can connect to an entry server in Iran while an exit server in Turkey forwards those connections to your application. MeshDock installs and manages the tunnel between them; prepare the destination application as explained in [What MeshDock installs and manages](#what-meshdock-installs-and-manages).
 
 1. **Save a credential.** Open **SSH vault** and add a root password or SSH private key. Private keys may have a passphrase and can be reused.
 2. **Add your servers.** Choose **Add server**, set the entry/exit role, and select a saved credential. The SSH management address can differ from the public transport address. Compare the discovered fingerprint against your provider console or another trusted source before accepting it.
@@ -155,8 +186,8 @@ Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No
 
 - **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443** for Caddy.
 - **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller, and public IPv4 transport addresses.
-- **Network:** Provider firewalls must permit the selected transport. Management SSH must be reachable from the controller even if it is blocked between tunnel peers.
-- **Destination:** Your proxy, web server, or other TCP application is already running at the destination host and port.
+- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall and forwarding rules inside the servers. Management SSH must be reachable from the controller even if it is blocked between tunnel peers.
+- **Destination application:** Have Xray/3x-ui, your web server, or another TCP application running at the destination host and port. You do not need to preinstall the tunnel software; MeshDock installs and configures that during deployment.
 
 On a **fresh checkout with no `.env`**, replace the example domain and run:
 
@@ -193,7 +224,7 @@ The admin variables initialize a new database only. Change an existing password 
 - **Recover failed changes:** MeshDock retries bounded failures and attempts to restore the preceding generation. If rollback cannot reach a host, restore SSH access and choose **Retry rollback** before deploying again.
 - **Remove managed resources:** **Clean up tunnels** disables links and removes owned services, interfaces, and firewall rules. Shared packages and recovery files remain; [full removal](docs/OPERATIONS.md#cleanup-and-full-removal) is a separate step.
 
-Changes spanning several hosts are not a single atomic transaction. Switching methods can interrupt active connections. MeshDock manages its own resources under `/var/lib/meshdock` and `meshdock-*` services; it does not rewrite existing Xray routing, Nginx configuration, SSH daemon settings, or default routes.
+Changes spanning several hosts are not a single atomic transaction. Switching methods can interrupt active connections. MeshDock installs and manages its own resources under `/var/lib/meshdock`, `meshdock-*` services, and dedicated firewall chains. Its networking changes are scoped to those tunnels; existing application configuration and management access remain under your control. See [What MeshDock installs and manages](#what-meshdock-installs-and-manages) for the responsibility split.
 
 <details>
 <summary><strong>Common questions</strong></summary>
