@@ -141,3 +141,7 @@ class Leader(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner: Mapped[str] = mapped_column(String(32))
     until: Mapped[float] = mapped_column(Float)
+    epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+# The lease epoch fences stale controllers after a worker restart or long pause.
