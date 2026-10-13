@@ -11,11 +11,13 @@ export function RemovalPanel({
   servers,
   revision,
   onClose,
+  onForceDelete,
 }: {
   removal: PendingRemoval;
   servers: Server[];
   revision: number;
   onClose: () => void;
+  onForceDelete: (server: Server) => void;
 }) {
   const { t } = useTranslation();
   const cache = useQueryClient();
@@ -98,6 +100,22 @@ export function RemovalPanel({
           )}
         </p>
       )}
+      <div className="force-removal-choices">
+        <p className="muted small">{t("forceDelete.missingServer")}</p>
+        {servers
+          .filter((server) =>
+            [removal.link.entry_id, removal.link.exit_id].includes(server.id),
+          )
+          .map((server) => (
+            <button
+              key={server.id}
+              className="text-button danger-text"
+              onClick={() => onForceDelete(server)}
+            >
+              {t("forceDelete.title", { name: server.name })}
+            </button>
+          ))}
+      </div>
       {confirmation && (
         <Confirm
           title={t(

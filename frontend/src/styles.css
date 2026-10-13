@@ -2129,3 +2129,69 @@ fieldset.field legend {
   margin-top: 4px;
   color: var(--muted);
 }
+
+.force-cleanup-report {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin: 12px 0;
+}
+.force-hosts {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+.force-host {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.force-host > div {
+  display: grid;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+.force-host small {
+  color: var(--muted);
+}
+.force-host.cleaned > svg {
+  color: var(--accent);
+}
+.force-host.unreachable > svg,
+.force-host.skipped > svg {
+  color: var(--warning, #c99a48);
+}
+.force-host.failed > svg {
+  color: var(--danger);
+}
+.force-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.force-warning,
+.force-attention {
+  color: var(--warning, #c99a48);
+}
+.force-attention {
+  width: 100%;
+  padding: 10px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  text-align: start;
+}
+.force-removal-choices {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+.status-dot.waiting_cleanup {
+  background: var(--danger);
+}
+.status-dot.cleanup_skipped {
+  background: var(--warning, #c99a48);
+}

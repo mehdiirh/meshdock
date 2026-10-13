@@ -41,6 +41,7 @@ import {
 import { api, useTopology, useSaveTopology, useJobs } from "../api";
 import { newId, type Server, type Link, type Topology } from "../types";
 import { ServerNode, type ServerFlowNode } from "./ServerNode";
+import { ForceDeleteDialog } from "./ForceDelete";
 import { ServerDialog } from "./ServerDialog";
 import { LinkPanel } from "./LinkPanel";
 import { RemovalPanel } from "./RemovalPanel";
@@ -73,6 +74,7 @@ export function Workspace({
   const [nodes, setNodes, onNodesChange] = useNodesState<ServerFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [search, setSearch] = useState("");
+  const [forceServer, setForceServer] = useState<Server | null>(null);
   const [serverDialog, setServerDialog] = useState<Server | "new" | null>(null);
   const [draft, setDraft] = useState<Link | null>(null);
   const [selectedRemoval, setSelectedRemoval] = useState<string | null>(null);
@@ -741,6 +743,7 @@ export function Workspace({
           <RemovalPanel
             key={removal.link.id}
             removal={removal}
+            onForceDelete={setForceServer}
             servers={visible.servers}
             revision={topology.revision}
             onClose={() => setSelectedRemoval(null)}
@@ -779,11 +782,25 @@ export function Workspace({
         )}
       </div>
       <Jobs servers={visible.servers} />
+      {forceServer && (
+        <ForceDeleteDialog
+          server={forceServer}
+          onClose={() => setForceServer(null)}
+        />
+      )}
       {serverDialog && (
         <>
           <ServerDialog
             key={typeof serverDialog === "string" ? "new" : serverDialog.id}
             server={serverDialog === "new" ? undefined : serverDialog}
+            onForceDelete={
+              serverDialog === "new"
+                ? undefined
+                : () => {
+                    setForceServer(serverDialog);
+                    setServerDialog(null);
+                  }
+            }
             onSave={saveServer}
             onClose={() => setServerDialog(null)}
             pending={save.isPending}

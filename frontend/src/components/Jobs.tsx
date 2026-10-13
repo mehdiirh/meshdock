@@ -9,9 +9,10 @@ import {
   Square,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, useJobs } from "../api";
+import { api, useJobs, useTopology } from "../api";
 import type { Log, Server } from "../types";
 import { latestJob, jobStatus, failurePhase } from "../deployments";
+import { ForceCleanupReport } from "./ForceDelete";
 import { ErrorMessage } from "./Primitives";
 export function Jobs({ servers }: { servers: Server[] }) {
   const { t, i18n } = useTranslation();
@@ -32,6 +33,7 @@ export function Jobs({ servers }: { servers: Server[] }) {
   }, []);
   const [selected, setSelected] = useState<string>();
   const jobs = useJobs();
+  const topology = useTopology();
   const latest = latestJob(jobs.data);
   const active = jobs.data?.find((j) => j.id === selected) || latest;
   const barJob = open ? active : latest;
@@ -96,6 +98,17 @@ export function Jobs({ servers }: { servers: Server[] }) {
   });
   return (
     <section className={"jobs-drawer " + (open ? "expanded" : "")}>
+      {!open && latest?.status === "waiting_cleanup" && (
+        <button
+          className="force-attention"
+          onClick={() => {
+            setSelected(latest.id);
+            setOpen(true);
+          }}
+        >
+          {t("forceDelete.needsReview")}
+        </button>
+      )}
       {open && (
         <div
           className="jobs-resize-handle"
@@ -203,6 +216,7 @@ export function Jobs({ servers }: { servers: Server[] }) {
                 </span>
               )}
               {active &&
+                active.kind !== "force_delete" &&
                 ["queued", "retrying", "running"].includes(active.status) &&
                 !active.cancel_requested && (
                   <button
@@ -229,6 +243,12 @@ export function Jobs({ servers }: { servers: Server[] }) {
             <ErrorMessage
               error={jobs.error || logs.error || recover.error || cancel.error}
             />
+            {active?.force_delete && (
+              <ForceCleanupReport
+                job={active}
+                revision={topology.data?.revision || 0}
+              />
+            )}
             {active?.cancel_requested &&
             ["running", "recovering"].includes(active.status) ? (
               <p className="deployment-notice" role="status">

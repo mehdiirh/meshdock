@@ -7,6 +7,8 @@ export function latestJob(jobs: Job[] = []) {
 }
 
 export function jobStatus(job: Job) {
+  if (job.status === "succeeded" && job.error_code === "force_delete_orphans")
+    return "cleanup_skipped";
   return job.cancel_requested && ["running", "recovering"].includes(job.status)
     ? "cancelling"
     : job.status;
@@ -30,9 +32,13 @@ export function linkDeploymentStatus(
 }
 
 export function failedDeployment(status: string) {
-  return ["failed", "retrying", "recovery_required", "cancelled"].includes(
-    status,
-  );
+  return [
+    "failed",
+    "retrying",
+    "recovery_required",
+    "cancelled",
+    "waiting_cleanup",
+  ].includes(status);
 }
 
 export function failurePhase(detail?: string) {

@@ -153,7 +153,9 @@
     "failed": "Failed · rolled back",
     "superseded": "Superseded",
     "cancelled": "Cancelled",
-    "cancelling": "Cancelling safely"
+    "cancelling": "Cancelling safely",
+    "waiting_cleanup": "Cleanup needs attention",
+    "cleanup_skipped": "Deleted with skipped cleanup"
   },
   "caveats": {
     "private_tls": "Pinned private TLS; this is not browser camouflage.",
@@ -333,5 +335,31 @@
     "chooseCredential": "Choose a saved credential",
     "discover": "Read jump-host key",
     "trust": "I verified this jump-host fingerprint independently."
+  },
+  "forceDelete": {
+    "action": "Force delete",
+    "title": "Force delete {{name}}",
+    "hint": "MeshDock will check this server and every connected endpoint, and clean its tunnel connections wherever SSH is available. If only this server is unreachable, it will be forgotten after its peers are cleaned.",
+    "preserve": "Other connections on shared servers are preserved. Completed cleanup stays in place. Unreachable peers require a separate choice; failed cleanup can be retried.",
+    "acknowledge": "I understand that forcing deletion may leave resources on this unreachable server.",
+    "report": "Endpoint cleanup report",
+    "removing": "Removing {{name}}",
+    "progressHint": "Cleanup is tracked separately for each endpoint. Closing this window does not stop the operation.",
+    "queued": "Waiting for the worker to check endpoints…",
+    "retry": "Retry cleanup",
+    "skip": "Skip unreachable cleanup",
+    "skipHint": "Forget this server and its connections without cleaning the unreachable endpoints? Tunnel services and firewall rules may remain there. MeshDock will retain a warning and the cleanup record.",
+    "orphans": "Deletion completed with skipped cleanup. Resources may remain on the listed endpoints; remove them before reusing or reconnecting those hosts.",
+    "missingServer": "Server permanently deleted or unreachable? Force deletion checks and cleans its remaining peers.",
+    "needsReview": "Force deletion needs your attention — review endpoint cleanup",
+    "hostStatus": {
+      "pending": "Waiting",
+      "working": "Cleaning",
+      "cleaned": "Cleaned",
+      "unreachable": "SSH unreachable",
+      "failed": "Cleanup needs attention",
+      "skipped": "Cleanup skipped — resources may remain"
+    },
+    "removed": "Removed {{name}}"
   }
 }

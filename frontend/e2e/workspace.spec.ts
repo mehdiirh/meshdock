@@ -664,3 +664,182 @@ test("custom jump keys require trust and direct mode clears the saved path", asy
       .ssh_jump,
   ).toBeNull();
 });
+
+for (const offline of ["target", "both"]) {
+  test(`force deletion reports cleanup and handles ${offline} offline`, async ({
+    page,
+  }) => {
+    let requested = false;
+    let skipped = false;
+    const operation = () => ({
+      id: "force-job",
+      revision: 2,
+      kind: "force_delete",
+      status: offline === "both" && !skipped ? "waiting_cleanup" : "succeeded",
+      attempt: 1,
+      created: 100,
+      error_code:
+        offline === "both" && !skipped
+          ? "force_delete_attention"
+          : "force_delete_orphans",
+      link_ids: [edge],
+      force_delete: {
+        server_id: b,
+        server_name: "Exit fixture",
+        can_skip: offline === "both" && !skipped,
+        hosts: [
+          {
+            server_id: a,
+            name: "Entry fixture",
+            host: "192.0.2.10",
+            status:
+              offline === "target"
+                ? "cleaned"
+                : skipped
+                  ? "skipped"
+                  : "unreachable",
+          },
+          {
+            server_id: b,
+            name: "Exit fixture",
+            host: "192.0.2.20",
+            status: offline === "target" || skipped ? "skipped" : "unreachable",
+          },
+        ],
+      },
+    });
+    await page.route("**/api/v1/topology", (route) =>
+      route.fulfill({ json: { ...topology, revision: requested ? 2 : 1 } }),
+    );
+    await page.route("**/api/v1/jobs", (route) =>
+      route.fulfill({ json: requested ? [operation()] : [] }),
+    );
+    await page.route(`**/api/v1/servers/${b}/force-delete`, (route) => {
+      expect(route.request().postDataJSON()).toEqual({ revision: 1 });
+      requested = true;
+      return route.fulfill({ json: { job_id: "force-job", revision: 2 } });
+    });
+    await page.route("**/api/v1/jobs/force-job/skip-cleanup", (route) => {
+      expect(route.request().postDataJSON()).toEqual({ revision: 2 });
+      skipped = true;
+      return route.fulfill({ json: { job_id: "force-job" } });
+    });
+    await page
+      .locator(".server-node")
+      .filter({ hasText: "Exit fixture" })
+      .getByRole("button", { name: "Edit server" })
+      .click();
+    await page
+      .getByRole("button", { name: "Force delete", exact: true })
+      .click();
+    const force = page.getByRole("button", {
+      name: "Force delete",
+      exact: true,
+    });
+    await expect(force).toBeDisabled();
+    await page.getByRole("checkbox").check();
+    await force.click();
+    const report = page.getByRole("region", {
+      name: "Endpoint cleanup report",
+    });
+    await expect(report).toBeVisible();
+    await expect(report.locator(".force-host")).toHaveCount(2);
+    if (offline === "both") {
+      await expect(
+        report.getByText("SSH unreachable", { exact: true }),
+      ).toHaveCount(2);
+      await report
+        .getByRole("button", { name: "Skip unreachable cleanup", exact: true })
+        .click();
+      await expect(
+        page.getByText(/Tunnel services and firewall rules may remain there/),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+      await expect(
+        report.getByText("Cleanup skipped — resources may remain", {
+          exact: true,
+        }),
+      ).toHaveCount(2);
+    } else {
+      await expect(report.getByText("Cleaned", { exact: true })).toHaveCount(1);
+      await expect(
+        report.getByText("Cleanup skipped — resources may remain", {
+          exact: true,
+        }),
+      ).toHaveCount(1);
+    }
+    await expect(
+      report.getByText(/Deletion completed with skipped cleanup/),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath(`force-delete-${offline}.png`),
+      animations: "disabled",
+    });
+  });
+}
+
+test("pending force cleanup survives reload and renders Persian report", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/jobs", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "force-waiting",
+          kind: "force_delete",
+          revision: 1,
+          created: 100,
+          attempt: 1,
+          status: "waiting_cleanup",
+          error_code: "force_delete_attention",
+          link_ids: [edge],
+          force_delete: {
+            server_id: b,
+            server_name: "Exit fixture",
+            can_skip: true,
+            hosts: [
+              {
+                server_id: a,
+                name: "Entry fixture",
+                host: "192.0.2.10",
+                status: "unreachable",
+              },
+              {
+                server_id: b,
+                name: "Exit fixture",
+                host: "192.0.2.20",
+                status: "unreachable",
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  await page.reload();
+  await page
+    .getByRole("button", {
+      name: "Force deletion needs your attention — review endpoint cleanup",
+    })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Endpoint cleanup report" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Change language", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(
+    page.getByRole("region", { name: "گزارش پاک‌سازی سرورها" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "رد کردن پاک‌سازی سرورهای دور از دسترس",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("force-delete-persian.png"),
+    animations: "disabled",
+  });
+});

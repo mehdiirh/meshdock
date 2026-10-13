@@ -119,7 +119,21 @@ export interface MethodInfo {
     }
   >;
 }
+export interface ForceDeletion {
+  server_id: string;
+  server_name: string;
+  can_skip: boolean;
+  hosts: {
+    server_id: string;
+    name: string;
+    host: string;
+    status: string;
+    error_code?: string | null;
+    error_message?: string | null;
+  }[];
+}
 export interface Job {
+  force_delete?: ForceDeletion;
   id: string;
   revision: number;
   kind: string;

@@ -21,6 +21,7 @@ export function ServerDialog({
   error,
   onVault,
   onDelete,
+  onForceDelete,
 }: {
   server?: Server;
   onSave: (server: Server) => void;
@@ -29,6 +30,7 @@ export function ServerDialog({
   error: unknown;
   onVault: () => void;
   onDelete?: () => void;
+  onForceDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
@@ -260,6 +262,15 @@ export function ServerDialog({
         )}
         <ErrorMessage error={error} />
         <footer>
+          {onForceDelete && (
+            <button
+              type="button"
+              className="text-button danger-text"
+              onClick={onForceDelete}
+            >
+              {t("forceDelete.action")}
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"
