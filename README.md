@@ -22,7 +22,7 @@ MeshDock brings your server inventory, tunnel configuration, SSH credentials, an
 ## What you can do
 
 - **Build your topology visually.** Drag server cards, connect their handles, reconnect lines, or select several servers to create connections in a batch.
-- **Switch tunnel methods.** Choose GRE, Backhaul, Rathole, reverse SSH, FRP WSS, or Hysteria 2. Mappings are validated when you change methods.
+- **Switch tunnel methods.** Choose GRE, Backhaul, Rathole, reverse SSH, FRP, or Hysteria 2. Mappings are validated when you change methods.
 - **Tune each connection.** Open **Advanced settings** for transport choices, mux buffers, timers, pools, MTU and other supported controls. Options are validated per method and deployed with health checks and rollback. See [supported settings and API examples](docs/METHOD-SETTINGS.md).
 - **Forward individual ports or ranges.** Use ranges such as `1023-65535` with explicit exceptions. MeshDock checks management ports, transport listeners, overlapping mappings, and live server conflicts.
 - **Reuse SSH credentials.** Store root passwords or private keys in an encrypted vault, then use them across servers. Verify and pin each server's SSH fingerprint.
@@ -173,10 +173,10 @@ All current adapters forward **TCP application traffic**. The transport itself m
 | Method | Transport | Encryption | Main requirement |
 | --- | --- | --- | --- |
 | **GRE** | IP protocol 47 | No | GRE must be permitted between public IPv4 endpoints; supports compact kernel forwarding for ranges. |
-| **Backhaul** | TCP | No | Exit can initiate TCP connections to entry; use application-level encryption. |
-| **Rathole** | TCP with Noise | Yes | Exit can initiate TCP connections to entry. |
+| **Backhaul** | TCP / TCPMUX / WS / WSS / WSMUX / WSSMUX | WSS modes | Exit initiates TCP connections to entry. MeshDock verifies TLS for WSS/WSSMUX. |
+| **Rathole** | TCP / Noise / TLS / WS / WSS | Noise and TLS modes | WS/WSS require x86_64 with the pinned release; other choices also work on ARM64. |
 | **Reverse SSH** | SSH over TCP | Yes | Exit can reach the managed SSH listener on entry. |
-| **FRP WSS** | WebSocket over TLS | Yes | Exit can reach entry over TCP; MeshDock uses pinned private TLS. |
+| **FRP** | TCP / KCP / QUIC / WebSocket / WSS | Yes | All choices verify managed TLS. KCP/QUIC require UDP and a TCP listener. |
 | **Hysteria 2** | QUIC over UDP, with Salamander | Yes | Entry can reach exit over UDP. |
 
 Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No method guarantees connectivity through every provider firewall or filtering system.
@@ -320,3 +320,13 @@ Linux packet tests are opt-in and run in a disposable container with no external
 ## License
 
 MeshDock is available under the [MIT License](LICENSE).
+
+### Deployment progress, failures and cancellation
+
+Open the deployment drawer to see persisted events as they arrive: server preflight, required packages, downloads/checksums, configuration validation, activation, health checks and rollback. Errors identify the server and failed step, with actionable explanations instead of exposing raw output that may contain secrets. The collapsed footer always shows the **latest revision**, even after you inspect an older job.
+
+Failed or retrying changed connections remain visible in red for inspection and editing. Unchanged connections retain their applied status. MeshDock compares each server's desired plan with its applied plan: adding a new exit does not redeploy an unchanged exit, and unchanged services on a shared entry remain running. Shared router/firewall changes may still affect connections using those resources.
+
+Use **Cancel & roll back** to stop queued work or request cancellation of running work. An in-flight server command is allowed to finish or time out before rollback begins; cancellation is not a process kill. The UI shows **Cancelling safely** until the worker finishes. If a host becomes unreachable, recovery remains required and newer deployments stay blocked. Cancelling leaves the desired topology available to edit or remove; it does not erase your connections or remove shared packages.
+
+API administrators can request cancellation with `POST /api/v1/jobs/{id}/cancel`. The request is durable and idempotent. Schema migration `92bfc04e31ad` adds the cancellation flag; normal startup applies migrations. Back up your database and encryption key before upgrades.
