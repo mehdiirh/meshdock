@@ -92,6 +92,7 @@
   "deleteCredentialHint": "Delete this credential? Credentials in use cannot be deleted.",
   "credentials": "Credentials",
   "jobs": "Deployments",
+  "resizeDeployments": "Resize deployment panel (drag or use arrow keys)",
   "noJobs": "No deployments yet",
   "logs": "Deployment log",
   "liveLogs": "Live events",

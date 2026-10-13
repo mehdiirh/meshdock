@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -17,6 +17,19 @@ export function Jobs({ servers }: { servers: Server[] }) {
   const { t, i18n } = useTranslation();
   const cache = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [height, setHeight] = useState(420);
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
+  const drag = useRef<{ y: number; height: number } | null>(null);
+  const maxHeight = Math.max(120, viewportHeight - 180);
+  const minHeight = Math.min(240, maxHeight);
+  const panelHeight = Math.min(maxHeight, Math.max(minHeight, height));
+  const resize = (value: number) =>
+    setHeight(Math.min(maxHeight, Math.max(minHeight, value)));
+  useEffect(() => {
+    const updateViewport = () => setViewportHeight(window.innerHeight);
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
   const [selected, setSelected] = useState<string>();
   const jobs = useJobs();
   const latest = latestJob(jobs.data);
@@ -83,6 +96,49 @@ export function Jobs({ servers }: { servers: Server[] }) {
   });
   return (
     <section className={"jobs-drawer " + (open ? "expanded" : "")}>
+      {open && (
+        <div
+          className="jobs-resize-handle"
+          role="separator"
+          tabIndex={0}
+          aria-label={t("resizeDeployments")}
+          aria-orientation="horizontal"
+          aria-valuemin={minHeight}
+          aria-valuemax={maxHeight}
+          aria-valuenow={panelHeight}
+          aria-controls="deployment-events"
+          title={t("resizeDeployments")}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            drag.current = { y: event.clientY, height: panelHeight };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (drag.current)
+              resize(drag.current.height + drag.current.y - event.clientY);
+          }}
+          onPointerUp={(event) => {
+            drag.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => (drag.current = null)}
+          onLostPointerCapture={() => (drag.current = null)}
+          onKeyDown={(event) => {
+            const heights: Record<string, number> = {
+              ArrowUp: panelHeight + 40,
+              ArrowDown: panelHeight - 40,
+              Home: minHeight,
+              End: maxHeight,
+            };
+            if (event.key in heights) {
+              event.preventDefault();
+              resize(heights[event.key]);
+            }
+          }}
+        >
+          <span />
+        </div>
+      )}
       <button
         className="jobs-bar"
         aria-expanded={open}
@@ -107,7 +163,11 @@ export function Jobs({ servers }: { servers: Server[] }) {
         </span>
       </button>
       {open && (
-        <div className="jobs-body">
+        <div
+          id="deployment-events"
+          className="jobs-body"
+          style={{ height: panelHeight }}
+        >
           <div className="job-list">
             {jobs.data?.map((job) => (
               <button

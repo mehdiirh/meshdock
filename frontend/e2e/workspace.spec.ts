@@ -344,3 +344,50 @@ test("cancellation stays visible until rollback completes", async ({
   await expect(page.locator(".jobs-bar")).toContainText("Cancelling safely");
   expect(requested).toBe(1);
 });
+
+test("deployment panel resizes by dragging and keyboard without leaving the viewport", async ({
+  page,
+}) => {
+  const bar = page.locator(".jobs-bar");
+  await bar.click();
+  const body = page.locator(".jobs-body");
+  const handle = page.getByRole("separator", {
+    name: /Resize deployment panel/,
+  });
+  await expect(body).toHaveCSS("height", "420px");
+  const bounds = (await handle.boundingBox())!;
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2 - 140,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await expect(body).toHaveCSS("height", "560px");
+  await handle.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(body).toHaveCSS("height", "600px");
+  await bar.click();
+  await bar.click();
+  await expect(body).toHaveCSS("height", "600px");
+  await page.setViewportSize({ width: 800, height: 650 });
+  await expect(body).toHaveCSS("height", "470px");
+  const drawer = (await page.locator(".jobs-drawer").boundingBox())!;
+  expect(drawer.y).toBeGreaterThanOrEqual(0);
+  expect(drawer.y + drawer.height).toBeLessThanOrEqual(650);
+  await page
+    .getByRole("button", { name: "Change language", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.getByRole("separator")).toHaveAttribute(
+    "aria-label",
+    /تغییر ارتفاع/,
+  );
+  await page.screenshot({
+    path: test.info().outputPath("resizable-deployments.png"),
+  });
+});
