@@ -6,6 +6,7 @@ import time
 from cryptography.hazmat.primitives import serialization as ser
 from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 
+from .changes import affected_links
 from .db import audit, uid
 from .methods import REGISTRY
 from .ports import contains, overlaps
@@ -117,22 +118,23 @@ def validate(db, body):
         if not link.enabled or link.control_port is None:
             continue
         adapter = REGISTRY[link.method]
-        protocol = adapter.control_protocol
-        if protocol is None:
+        protocols = adapter.control_protocols(link.model_dump())
+        if not protocols:
             raise AppError("invalid_topology")
         server_id = (
             link.entry_id if adapter.metadata["direction"] == "exit-to-entry" else link.exit_id
         )
         port = link.control_port
-        if protocol == "tcp" and port == servers[server_id].ssh_port:
-            raise AppError("ssh_port_conflict")
-        listener = (server_id, protocol, port)
-        if listener in control_ports or (
-            protocol == "tcp"
-            and any(contains(mapping, port) for mapping, _, _ in ports.get(server_id, []))
-        ):
-            raise AppError("control_port_conflict")
-        control_ports.add(listener)
+        for protocol in protocols:
+            if protocol == "tcp" and port == servers[server_id].ssh_port:
+                raise AppError("ssh_port_conflict")
+            listener = (server_id, protocol, port)
+            if listener in control_ports or (
+                protocol == "tcp"
+                and any(contains(mapping, port) for mapping, _, _ in ports.get(server_id, []))
+            ):
+                raise AppError("control_port_conflict")
+            control_ports.add(listener)
 
     visiting, visited = set(), set()
 
@@ -153,6 +155,8 @@ def validate(db, body):
 
 def enqueue(db, actor, kind="deploy"):
     snapshot = desired(db, True)
+    applied = json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0])
+    snapshot["affected_link_ids"] = affected_links(applied, snapshot)
     job = uid()
     now = time.time()
     db.execute(

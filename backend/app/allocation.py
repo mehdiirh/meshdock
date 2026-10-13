@@ -24,18 +24,19 @@ def allocate(snapshot):
             )
         adapter = REGISTRY[link["method"]]
         adapter.validate_mappings(link)
-        if adapter.control_protocol and link.get("control_port"):
+        if adapter.control_protocols(link) and link.get("control_port"):
             server = (
                 link["entry_id"]
                 if adapter.metadata["direction"] == "exit-to-entry"
                 else link["exit_id"]
             )
-            occupied.add((server, adapter.control_protocol, link["control_port"]))
+            for protocol in adapter.control_protocols(link):
+                occupied.add((server, protocol, link["control_port"]))
 
     for link in links:
         adapter = REGISTRY[link["method"]]
-        protocol = adapter.control_protocol
-        if protocol:
+        protocols = adapter.control_protocols(link)
+        if protocols:
             server = (
                 link["entry_id"]
                 if adapter.metadata["direction"] == "exit-to-entry"
@@ -43,7 +44,7 @@ def allocate(snapshot):
             )
             destination_ports = targets[(server, servers[server]["address"])]
             if link.get("control_port"):
-                if protocol == "tcp" and any(
+                if "tcp" in protocols and any(
                     start <= link["control_port"] <= end for start, end in destination_ports
                 ):
                     raise AppError("control_port_conflict")
@@ -54,9 +55,9 @@ def allocate(snapshot):
                     (
                         p
                         for p in candidates
-                        if (server, protocol, p) not in occupied
+                        if all((server, protocol, p) not in occupied for protocol in protocols)
                         and (
-                            protocol != "tcp"
+                            "tcp" not in protocols
                             or (
                                 p != servers[server]["ssh_port"]
                                 and not any(contains(mapping, p) for mapping in public[server])
@@ -68,7 +69,8 @@ def allocate(snapshot):
                 )
                 if port is None:
                     raise AppError("port_capacity")
-                occupied.add((server, protocol, port))
+                for protocol in protocols:
+                    occupied.add((server, protocol, port))
                 link["allocated_control"] = port
 
     # Separate loopback addresses give each transport its own port space. Build
@@ -98,7 +100,8 @@ def allocate(snapshot):
             unavailable.update(range(first, last + 1))
         available = (p for p in chain(range(30000, 65536), range(1, 30000)) if p not in unavailable)
         selected = []
-        for index in range(len(link["ports"]) + adapter.auxiliary_count):
+        entry_aux, exit_aux = adapter.auxiliary_counts(link)
+        for index in range(len(link["ports"]) + entry_aux):
             preferred = 30000 + (link["slot"] - 1) * 16 + index
             if preferred <= 65535 and preferred not in unavailable:
                 port = preferred
@@ -111,4 +114,20 @@ def allocate(snapshot):
         internal[key].update(selected)
         link["internal_ports"] = selected[: len(link["ports"])]
         link["auxiliary_ports"] = selected[len(link["ports"]) :]
+        exit_key = (link["exit_id"], bind)
+        unavailable_exit = set(internal[exit_key]) | {servers[link["exit_id"]]["ssh_port"]}
+        for first, last in targets[exit_key]:
+            unavailable_exit.update(range(first, last + 1))
+        candidates = (
+            p for p in chain(range(30000, 65536), range(1, 30000)) if p not in unavailable_exit
+        )
+        selected_exit = []
+        for _ in range(exit_aux):
+            port = next(candidates, None)
+            if port is None:
+                raise AppError("port_capacity")
+            selected_exit.append(port)
+            unavailable_exit.add(port)
+        internal[exit_key].update(selected_exit)
+        link["exit_auxiliary_ports"] = selected_exit
     return links

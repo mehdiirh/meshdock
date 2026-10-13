@@ -13,7 +13,7 @@ from .planner import build, empty
 from .security import AppError, unseal
 from .ssh import Remote
 
-TERMINAL = {"succeeded", "failed", "superseded", "recovery_required"}
+TERMINAL = {"succeeded", "failed", "superseded", "recovery_required", "cancelled"}
 
 
 class DemoRemote:
@@ -46,22 +46,38 @@ class Target:
 def targets(previous, desired):
     """Retain old endpoints for cleanup when a server's address is replaced."""
     plans = build(desired)
-    result = {}
-    for server in previous.get("servers", []):
-        target = Target(server, empty())
-        target.plan.pop("backends")
-        target.plan.pop("relay")
-        result[target.identity] = target
-    for server in desired["servers"]:
-        target = Target(server, plans[server["id"]])
-        result[target.identity] = target
-    return list(result.values())
+    previous_plans = build(previous) if previous.get("servers") else {}
+    old = {
+        Target(server, previous_plans[server["id"]]).identity: Target(
+            server, previous_plans[server["id"]]
+        )
+        for server in previous.get("servers", [])
+    }
+    current = {
+        Target(server, plans[server["id"]]).identity: Target(server, plans[server["id"]])
+        for server in desired["servers"]
+    }
+    result = []
+    for identity, target in old.items():
+        if identity not in current and target.plan["units"]:
+            cleanup = empty()
+            cleanup.pop("backends")
+            cleanup.pop("relay")
+            result.append(Target(target.server, cleanup))
+    for identity, target in current.items():
+        before = old.get(identity)
+        if before and before.plan == target.plan:
+            continue
+        if target.plan["units"] or (before and before.plan["units"]):
+            result.append(target)
+    return result
 
 
 class Worker:
     def __init__(self, remote_factory=None):
         self.owner = uid()
         self.fence = 0
+        self.active_job_id = None
         self.remote_factory = remote_factory or (DemoRemote if settings.DEMO else Remote)
         self.stopped = threading.Event()
         self.lease_lost = threading.Event()
@@ -167,6 +183,13 @@ class Worker:
                 self.lease_lost.set()
                 raise AppError("stale_worker")
         remote = self.remote(server, namespace)
+        if self.active_job_id and isinstance(remote, Remote):
+            remote.on_progress = lambda code, detail: log(
+                self.active_job_id,
+                code,
+                detail=json.dumps(detail) if detail else "",
+                server=server["id"],
+            )
         try:
             if install:
                 remote.install_agent()
@@ -212,16 +235,33 @@ class Worker:
                 ),
             )
 
+    def cancellation_requested(self, job):
+        with connect() as database:
+            row = database.execute(
+                "SELECT cancel_requested FROM jobs WHERE id=?", (job["id"],)
+            ).fetchone()
+        return bool(row and row[0])
+
+    def check_cancelled(self, job):
+        if self.cancellation_requested(job):
+            raise AppError("deployment_cancelled")
+
     def process(self, job):
+        self.active_job_id = job["id"]
         snapshot = json.loads(job["snapshot"])
         namespace = snapshot["namespace"]
         receipt = json.loads(job["receipt"])
         if job["status"] == "recovering":
             ok = self.compensate(job, receipt, namespace)
+            cancelled = self.cancellation_requested(job)
             self.finish(
                 job,
-                "failed" if ok else "recovery_required",
-                "recovered" if ok else "recovery_required",
+                (("cancelled" if cancelled else "failed") if ok else "recovery_required"),
+                (
+                    ("deployment_cancelled" if cancelled else "recovered")
+                    if ok
+                    else "recovery_required"
+                ),
             )
             log(job["id"], "recovered" if ok else "recovery_required")
             return
@@ -232,10 +272,14 @@ class Worker:
         receipt = {"generation": job["id"] + f'{job["attempt"]:04x}', "hosts": []}
         self.remember(job, receipt)
         log(job["id"], "worker_claimed", "simulation" if settings.DEMO else "")
+        phase, failure_server = "preparing", None
         try:
+            self.check_cancelled(job)
             fleet = targets(previous, snapshot)
             for target in fleet:
+                self.check_cancelled(job)
                 server = target.server
+                failure_server, phase = server["id"], "preparing"
                 log(job["id"], "preparing", server=server["id"])
                 # Write intent BEFORE the network call: a lost reply is an uncertain outcome.
                 receipt["hosts"].append({"server": server, "phase": "preparing"})
@@ -254,6 +298,8 @@ class Worker:
                 receipt["hosts"][-1]["phase"] = "prepared"
                 self.remember(job, receipt)
             for item in receipt["hosts"]:
+                self.check_cancelled(job)
+                failure_server, phase = item["server"]["id"], "applying"
                 log(job["id"], "applying", server=item["server"]["id"])
                 self.operate(
                     item["server"],
@@ -265,8 +311,10 @@ class Worker:
                 self.remember(job, receipt)
             # Reverse transports need a short convergence window after both sides are started.
             for item in receipt["hosts"]:
+                failure_server, phase = item["server"]["id"], "checking"
                 log(job["id"], "checking", server=item["server"]["id"])
                 for attempt in range(12):
+                    self.check_cancelled(job)
                     try:
                         self.operate(
                             item["server"],
@@ -281,6 +329,8 @@ class Worker:
                         time.sleep(3)
             # Commit markers retain the previous generation, so a later host's failure remains reversible.
             for item in receipt["hosts"]:
+                self.check_cancelled(job)
+                failure_server, phase = item["server"]["id"], "committing"
                 self.operate(
                     item["server"],
                     namespace,
@@ -288,6 +338,10 @@ class Worker:
                     {"generation": receipt["generation"]},
                 )
             with connect(True) as database:
+                if database.execute(
+                    "SELECT cancel_requested FROM jobs WHERE id=?", (job["id"],)
+                ).fetchone()[0]:
+                    raise AppError("deployment_cancelled")
                 leader = database.execute("SELECT * FROM leader WHERE id=1").fetchone()
                 if not leader or leader["owner"] != self.owner or leader["until"] <= time.time():
                     self.lease_lost.set()
@@ -304,7 +358,10 @@ class Worker:
             log(job["id"], "succeeded")
         except Exception as error:
             code = error.code if isinstance(error, AppError) else "worker_error"
-            details = error.details if isinstance(error, AppError) else None
+            details = dict(error.details or {}) if isinstance(error, AppError) else {}
+            details.update(phase=phase)
+            if failure_server:
+                details["server_id"] = failure_server
             log(
                 job["id"],
                 code,
@@ -315,6 +372,9 @@ class Worker:
             recovered = self.compensate(job, receipt, namespace)
             if not recovered:
                 self.finish(job, "recovery_required", code)
+            elif code == "deployment_cancelled" or self.cancellation_requested(job):
+                self.finish(job, "cancelled", "deployment_cancelled")
+                log(job["id"], "deployment_cancelled")
             elif job["attempt"] < settings.MAX_ATTEMPTS:
                 self.finish(job, "retrying", code, delay=5 * 2 ** job["attempt"])
                 log(job["id"], "retrying")

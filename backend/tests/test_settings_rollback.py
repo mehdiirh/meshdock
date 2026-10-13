@@ -12,10 +12,19 @@ from app.worker import Worker
 from test_method_settings import CUSTOM
 from test_topology import payload, seeded
 
+CASES = [(method, {}, settings) for method, settings in CUSTOM.items()]
+for method, transports in {
+    "backhaul": ["tcp", "tcpmux", "ws", "wss", "wsmux", "wssmux"],
+    "rathole": ["noise", "tcp", "tls", "ws", "wss"],
+    "frp_wss": ["wss", "tcp", "kcp", "quic", "websocket"],
+}.items():
+    for index, transport in enumerate(transports):
+        CASES.append((method, {"transport": transports[index - 1]}, {"transport": transport}))
 
-@pytest.mark.parametrize("method", list(CUSTOM))
+
+@pytest.mark.parametrize("method,initial,changed", CASES)
 def test_settings_deployment_health_failure_rollback_and_retry(
-    admin, tmp_path, monkeypatch, method
+    admin, tmp_path, monkeypatch, method, initial, changed
 ):
     agents = {}
     fail_health = False
@@ -57,7 +66,7 @@ def test_settings_deployment_health_failure_rollback_and_retry(
 
     value = seeded(admin)
     value["links"] = value["links"][:1]
-    value["links"][0].update(method=method, settings={})
+    value["links"][0].update(method=method, settings=initial)
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
     worker = Worker(LocalRemote)
     assert worker.acquire()
@@ -67,7 +76,7 @@ def test_settings_deployment_health_failure_rollback_and_retry(
     manifests = {key: (path / "manifest.json").read_bytes() for key, path in previous.items()}
     value = admin.get("/api/v1/topology").json()
     applied_revision = value["applied_revision"]
-    value["links"][0]["settings"] = CUSTOM[method]
+    value["links"][0]["settings"] = changed
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
     fail_health = True
     worker.process(worker.claim())
@@ -80,7 +89,7 @@ def test_settings_deployment_health_failure_rollback_and_retry(
             assert (agent.current() / name).read_text() == contents
     with connect() as database:
         applied = json.loads(database.execute("SELECT applied FROM state").fetchone()[0])
-        assert applied["links"][0]["settings"] == {}
+        assert applied["links"][0]["settings"] == initial
     fail_health = False
     with connect(True) as database:
         database.execute("UPDATE jobs SET next_run=0 WHERE status='retrying'")
@@ -88,7 +97,7 @@ def test_settings_deployment_health_failure_rollback_and_retry(
     assert admin.get("/api/v1/jobs").json()[0]["status"] == "succeeded"
     with connect() as database:
         applied = json.loads(database.execute("SELECT applied FROM state").fetchone()[0])
-        assert applied["links"][0]["settings"] == CUSTOM[method]
+        assert applied["links"][0]["settings"] == changed
     assert any(
         (agent.current() / "manifest.json").read_bytes() != manifests[key]
         for key, agent in agents.items()

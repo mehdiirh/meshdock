@@ -1,9 +1,11 @@
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
+from ..changes import affected_links
 from ..db import audit, connect
 from ..i18n import translate
 from ..security import AppError, principal, require
@@ -16,14 +18,52 @@ def language(request):
 
 
 @router.get("/jobs")
-def jobs(actor=Depends(require("read"))):
+def jobs(request: Request, actor=Depends(require("read"))):
     with connect() as db:
-        return [
-            dict(r)
-            for r in db.execute(
-                "SELECT id,revision,kind,status,attempt,created,started,finished,error_code FROM jobs ORDER BY created DESC LIMIT 100"
+        rows = db.execute(
+            "SELECT id,revision,kind,status,attempt,created,started,finished,error_code,cancel_requested,snapshot "
+            "FROM jobs ORDER BY revision DESC,created DESC,id DESC LIMIT 100"
+        ).fetchall()
+        applied = json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0])
+        result = []
+        for row in rows:
+            job = dict(row)
+            snapshot = json.loads(job.pop("snapshot"))
+            job["link_ids"] = snapshot.get("affected_link_ids")
+            if job["link_ids"] is None:
+                # Older snapshots predate explicit change attribution.
+                job["link_ids"] = affected_links(applied, snapshot)
+            job["error_message"] = (
+                translate(job["error_code"], language(request)) if job["error_code"] else None
             )
-        ]
+            failure = db.execute(
+                "SELECT server_id,code,detail FROM logs WHERE job_id=? AND level='error' ORDER BY id DESC LIMIT 1",
+                (job["id"],),
+            ).fetchone()
+            job["failure"] = dict(failure) if failure else None
+            result.append(job)
+        return result
+
+
+@router.post("/jobs/{id}/cancel", status_code=202)
+def cancel(id: str, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        row = db.execute("SELECT status,cancel_requested FROM jobs WHERE id=?", (id,)).fetchone()
+        if not row:
+            raise AppError("not_found", 404)
+        if row["status"] == "cancelled" or row["cancel_requested"]:
+            return {"job_id": id}
+        if row["status"] not in ("queued", "retrying", "running"):
+            raise AppError("invalid_state", 409)
+        if row["status"] in ("queued", "retrying"):
+            db.execute(
+                "UPDATE jobs SET cancel_requested=1,status='cancelled',finished=?,error_code='deployment_cancelled' WHERE id=?",
+                (time.time(), id),
+            )
+        else:
+            db.execute("UPDATE jobs SET cancel_requested=1 WHERE id=?", (id,))
+        audit(db, actor, "deployment_cancel_requested", id)
+    return {"job_id": id}
 
 
 @router.post("/jobs/{id}/recover", status_code=202)
@@ -94,6 +134,7 @@ async def events(
                 continue
             if not row or row[0] in (
                 "succeeded",
+                "cancelled",
                 "failed",
                 "superseded",
                 "recovery_required",

@@ -40,8 +40,10 @@ class Context:
             return self.link["internal_ports"][index]
         return 30000 + (self.link["slot"] - 1) * 16 + index
 
-    def auxiliary(self, index):
-        return self.link.get("auxiliary_ports", [22000 + self.link["slot"]])[index]
+    def auxiliary(self, index, side="entry"):
+        key = "auxiliary_ports" if side == "entry" else "exit_auxiliary_ports"
+        fallback = 22000 if side == "entry" else 24000
+        return self.link.get(key, [fallback + self.link["slot"]])[index]
 
     @property
     def filename(self):
@@ -88,6 +90,20 @@ class Adapter:
 
     control_protocol: str | None = "tcp"
 
+    transports: dict = {}
+
+    def transport(self, link):
+        options = self.options(link)
+        return self.transports.get(getattr(options, "transport", None), {})
+
+    def control_protocols(self, link):
+        return self.transport(link).get(
+            "control_protocols", [self.control_protocol] if self.control_protocol else []
+        )
+
+    def auxiliary_counts(self, link):
+        return self.auxiliary_count, 0
+
     internal_on_exit = False
     auxiliary_count = 0
     max_expanded_ports = 65535
@@ -132,7 +148,11 @@ class Adapter:
             entry["sockets"].append(
                 {"address": context.bind_address, "port": port, "protocol": "tcp"}
             )
-        if self.control_protocol:
+        for port in context.link.get("exit_auxiliary_ports", []):
+            exit["sockets"].append(
+                {"address": context.bind_address, "port": port, "protocol": "tcp"}
+            )
+        for protocol in self.control_protocols(context.link):
             plan, server = (
                 (entry, context.entry)
                 if self.metadata["direction"] == "exit-to-entry"
@@ -142,7 +162,7 @@ class Adapter:
                 {
                     "address": server["address"],
                     "port": context.control,
-                    "protocol": self.control_protocol,
+                    "protocol": protocol,
                 }
             )
 

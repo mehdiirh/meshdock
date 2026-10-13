@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import re
 import socket
 import time
 from pathlib import Path
@@ -48,11 +49,73 @@ def private_key(secret, passphrase=""):
     raise AppError("invalid_key")
 
 
+PROGRESS_CODES = {
+    "dependencies_checking",
+    "packages_installing",
+    "dependencies_ready",
+    "binary_downloading",
+    "binary_verified",
+    "preflight_checking",
+    "preflight_passed",
+    "configuration_validating",
+    "configuration_ready",
+}
+
+
+def progress_event(line):
+    try:
+        event = json.loads(line)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if (
+        not isinstance(event, dict)
+        or not isinstance(event.get("event"), str)
+        or event["event"] not in PROGRESS_CODES
+    ):
+        return None
+    detail = event.get("detail", {})
+    safe = {}
+    packages = detail.get("packages", []) if isinstance(detail, dict) else []
+    allowed = {
+        "haproxy",
+        "iproute2",
+        "iptables",
+        "ca-certificates",
+        "openssh-server",
+        "openssh-client",
+        "iputils-ping",
+    }
+    if (
+        isinstance(packages, list)
+        and packages
+        and all(isinstance(p, str) and p in allowed for p in packages)
+    ):
+        safe["packages"] = packages
+    if (
+        isinstance(detail, dict)
+        and isinstance(detail.get("binary"), str)
+        and detail["binary"]
+        in {
+            "backhaul",
+            "rathole",
+            "frpc",
+            "frps",
+            "hysteria",
+        }
+    ):
+        safe["binary"] = detail["binary"]
+    return event["event"], safe
+
+
 class Remote:
     def __init__(self, server, credential, namespace):
+        self.on_progress = None
         self.server = server
         self.ns = namespace
-        self.t = transport(server["host"], server["ssh_port"])
+        try:
+            self.t = transport(server["host"], server["ssh_port"])
+        except (OSError, paramiko.SSHException):
+            raise AppError("ssh_unreachable", details={"server_id": server["id"]}) from None
         try:
             if fingerprint(self.t.get_remote_server_key()) != server["fingerprint"]:
                 raise AppError("host_key_changed")
@@ -66,6 +129,9 @@ class Remote:
             self.t.set_keepalive(20)
             if not self.t.is_authenticated():
                 raise AppError("ssh_auth")
+        except paramiko.AuthenticationException:
+            self.t.close()
+            raise AppError("ssh_auth", details={"server_id": server["id"]}) from None
         except Exception:
             self.t.close()
             raise
@@ -73,7 +139,7 @@ class Remote:
     def close(self):
         self.t.close()
 
-    def command(self, command, data=b"", timeout=360):
+    def command(self, command, data=b"", timeout=360, stream=False):
         ch = self.t.open_session(timeout=15)
         ch.settimeout(15)
         ch.exec_command(command)
@@ -81,6 +147,7 @@ class Remote:
             ch.sendall(data)
         ch.shutdown_write()
         output = bytearray()
+        pending = bytearray()
         start = time.monotonic()
         try:
             while True:
@@ -89,7 +156,16 @@ class Remote:
                     (ch.recv_stderr_ready, ch.recv_stderr),
                 ):
                     if ready():
-                        output.extend(recv(32768))
+                        chunk = recv(32768)
+                        output.extend(chunk)
+                        if stream:
+                            pending.extend(chunk)
+                            while b"\n" in pending:
+                                line, _, remainder = pending.partition(b"\n")
+                                pending = bytearray(remainder)
+                                event = progress_event(line)
+                                if event and self.on_progress:
+                                    self.on_progress(*event)
                         if len(output) > 2_000_000:
                             raise RuntimeError("output_limit")
                 if ch.exit_status_ready() and not ch.recv_ready() and not ch.recv_stderr_ready():
@@ -102,7 +178,10 @@ class Remote:
                 raise RuntimeError(
                     "remote_command_failed"
                 )  # Remote output can contain credentials; never echo it.
-            return output.decode(errors="replace")
+            text = output.decode(errors="replace")
+            if stream:
+                text = "\n".join(line for line in text.splitlines() if not progress_event(line))
+            return text
         finally:
             ch.close()
 
@@ -126,6 +205,7 @@ class Remote:
             "python3 /var/lib/meshdock/" + self.ns + "/agent.py",
             json.dumps({"namespace": self.ns, "action": action, **payload}).encode(),
             timeout=1200 if action == "prepare" else 360,
+            stream=True,
         )
         result = json.loads(raw)
         if not result.get("ok"):
@@ -169,5 +249,35 @@ class Remote:
                     if key in ("required", "available") and type(value) is int and value >= 0
                 }
                 safe["server_id"] = self.server["id"]
+            if result.get("code") == "health_failed":
+                if details.get("check") == "service" and re.fullmatch(
+                    r"meshdock-[a-z0-9-]+\.service", str(details.get("unit", ""))
+                ):
+                    safe = {"check": "service", "unit": details["unit"]}
+                elif (
+                    details.get("check") == "connection"
+                    and re.fullmatch(r"[A-Za-z0-9.-]{1,253}", str(details.get("address", "")))
+                    and type(details.get("port")) is int
+                    and 1 <= details["port"] <= 65535
+                ):
+                    safe = {
+                        "check": "connection",
+                        "address": details["address"],
+                        "port": details["port"],
+                    }
+            if details.get("command") in {
+                "apt-get",
+                "env",
+                "haproxy",
+                "sshd",
+                "systemctl",
+                "iptables",
+                "iptables-restore",
+                "ip",
+            }:
+                safe["command"] = details["command"]
+            if type(details.get("exit_code")) is int:
+                safe["exit_code"] = details["exit_code"]
+            safe["server_id"] = self.server["id"]
             raise AppError(result.get("code", "remote_failed"), details=safe)
         return result

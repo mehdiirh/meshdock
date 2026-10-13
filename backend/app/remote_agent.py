@@ -29,10 +29,32 @@ class OperationError(Exception):
 
 
 def run(arguments, *, input=None, check=True, timeout=180):
-    result = subprocess.run(arguments, input=input, capture_output=True, timeout=timeout)
+    try:
+        result = subprocess.run(arguments, input=input, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise OperationError("command_timeout", {"command": Path(arguments[0]).name}) from None
     if check and result.returncode:
         # Command output may contain configuration secrets. Only stable codes leave the host.
-        raise OperationError("remote_failed")
+        output = " ".join((result.stdout + result.stderr).decode(errors="replace").lower().split())
+        reasons = {
+            "could not get lock": "package_lock",
+            "temporary failure resolving": "package_dns",
+            "does not have a release file": "package_repository",
+            "404 not found": "package_repository",
+            "could not wait for server fd": "package_network",
+            "connection timed out": "package_network",
+            "no space left on device": "disk_full",
+            "unable to locate package": "package_missing",
+            "certificate verification failed": "package_tls",
+            "certificate verification": "package_tls",
+            "conflicting values set for option signed-by": "package_repository",
+        }
+        code = next(
+            (reason for pattern, reason in reasons.items() if pattern in output), "remote_failed"
+        )
+        raise OperationError(
+            code, {"command": Path(arguments[0]).name, "exit_code": result.returncode}
+        )
     return result
 
 
@@ -51,9 +73,10 @@ def atomic_json(path, value):
 
 
 class Agent:
-    def __init__(self, namespace, root=None):
+    def __init__(self, namespace, root=None, progress=None):
         if not re.fullmatch("[a-f0-9]{10}", namespace):
             raise OperationError("preflight_failed")
+        self.progress = progress or (lambda code, detail=None: None)
         self.namespace = namespace
         self.prefix = "meshdock-" + namespace + "-"
         self.root = Path(root or "/var/lib/meshdock/" + namespace)
@@ -90,7 +113,23 @@ class Agent:
             return {"units": {}, "interfaces": [], "listeners": [], "firewall": []}
         return json.loads((path / "manifest.json").read_text())
 
+    def architecture_preflight(self, plan):
+        architecture = {"arm64": "aarch64", "amd64": "x86_64"}.get(
+            platform.machine(), platform.machine()
+        )
+        for requirement in plan.get("architecture_requirements", []):
+            if architecture not in requirement["supported"]:
+                raise OperationError(
+                    "transport_architecture_unsupported",
+                    {
+                        "method": requirement["method"],
+                        "transport": requirement["transport"],
+                        "architecture": architecture,
+                    },
+                )
+
     def preflight(self, plan):
+        self.architecture_preflight(plan)
         if os.geteuid() != 0 or not Path("/run/systemd/system").is_dir():
             raise OperationError("preflight_failed")
         if not shutil.which("apt-get"):
@@ -380,14 +419,14 @@ class Agent:
     def dependencies(self, plan, artifacts):
         if not plan["units"]:
             return
-        packages = [
-            "haproxy",
-            "iproute2",
-            "iptables",
-            "openssh-client",
-            "openssh-server",
-            "ca-certificates",
-        ]
+        packages = ["iproute2", "iptables", "ca-certificates"]
+        if "haproxy.cfg" in plan["files"]:
+            packages.append("haproxy")
+        if any(name.endswith("-sshd.conf") for name in plan["files"]):
+            packages.append("openssh-server")
+        if any("/usr/bin/ssh " in unit for unit in plan["units"].values()):
+            packages.append("openssh-client")
+        self.progress("dependencies_checking")
         if plan.get("gre_checks"):
             packages.append("iputils-ping")
         missing = [
@@ -397,6 +436,7 @@ class Agent:
             != b"install ok installed"
         ]
         if missing:
+            self.progress("packages_installing", {"packages": missing})
             # Do not let package post-install hooks start a competing default proxy.
             # Existing host policy is respected. The temporary policy is removed in finally.
             policy = Path("/usr/sbin/policy-rc.d")
@@ -409,12 +449,25 @@ class Agent:
                     with os.fdopen(fd, "w") as stream:
                         stream.write(self.package_policy_text)
                 try:
-                    run(["apt-get", "update", "-qq"], timeout=240)
+                    run(
+                        [
+                            "apt-get",
+                            "-o",
+                            "Acquire::ForceIPv4=true",
+                            "-o",
+                            "APT::Update::Error-Mode=any",
+                            "update",
+                            "-qq",
+                        ],
+                        timeout=240,
+                    )
                     run(
                         [
                             "env",
                             "DEBIAN_FRONTEND=noninteractive",
                             "apt-get",
+                            "-o",
+                            "Acquire::ForceIPv4=true",
                             "install",
                             "-y",
                             "-qq",
@@ -427,7 +480,9 @@ class Agent:
                         policy.unlink()
             finally:
                 lock.close()
-        Path("/run/sshd").mkdir(mode=0o755, exist_ok=True)
+        self.progress("dependencies_ready")
+        if "openssh-server" in packages:
+            Path("/run/sshd").mkdir(mode=0o755, exist_ok=True)
         for name in plan["binaries"]:
             architecture = {"arm64": "aarch64", "amd64": "x86_64"}.get(
                 platform.machine(), platform.machine()
@@ -440,6 +495,7 @@ class Agent:
             marker = destination.with_suffix(".sha256")
             if destination.exists() and marker.exists() and marker.read_text() == expected:
                 continue
+            self.progress("binary_downloading", {"binary": name})
             with urllib.request.urlopen(url, timeout=60) as response:
                 archive = response.read(100_000_001)
             if len(archive) > 100_000_000 or hashlib.sha256(archive).hexdigest() != expected:
@@ -463,12 +519,15 @@ class Agent:
             temporary.chmod(0o700)
             os.replace(temporary, destination)
             marker.write_text(expected)
+            self.progress("binary_verified", {"binary": name})
 
     def prepare(self, generation, plan, artifacts):
         directory = self.generation(generation)
         if (directory / "journal.json").exists():
             return
+        self.progress("preflight_checking")
         self.preflight(plan)
+        self.progress("preflight_passed")
         self.dependencies(plan, artifacts)
         if not shutil.which("ss"):
             raise OperationError("preflight_failed")
@@ -478,6 +537,7 @@ class Agent:
             path = directory / name
             path.write_text(content)
             path.chmod(0o600)
+        self.progress("configuration_validating")
         if "haproxy.cfg" in plan["files"]:
             # Check staged certificate paths before activating the current pointer.
             temporary = directory / "haproxy.check"
@@ -501,6 +561,7 @@ class Agent:
                 finally:
                     temporary.unlink()
         atomic_json(directory / "manifest.json", plan)
+        self.progress("configuration_ready")
         previous = self.current()
         atomic_json(
             directory / "journal.json",
@@ -537,12 +598,53 @@ class Agent:
         if run(["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False).returncode:
             run(["iptables", "-w", "-I", "INPUT", "1", "-j", self.chain])
 
+    def unit_signature(self, plan, unit):
+        content = plan.get("units", {}).get(unit)
+        if content is None:
+            return None
+        files = plan.get("files", {})
+        pattern = re.escape(str(self.root / "current") + "/") + r"([a-zA-Z0-9_.-]+)"
+        pending = re.findall(pattern, content)
+        referenced = {}
+        while pending:
+            name = pending.pop()
+            if name in referenced or name not in files:
+                continue
+            referenced[name] = files[name]
+            pending.extend(re.findall(pattern, files[name]))
+        return content, referenced
+
     def switch(self, target):
         previous = self.manifest(self.current())
         desired = self.manifest(target)
-        # A full generation is activated together locally. TCP sessions may reconnect.
+        network_keys = (
+            "network_interfaces",
+            "network_rules",
+            "forwarding_addresses",
+            "loopback_interfaces",
+        )
+        network_changed = any(previous.get(key) != desired.get(key) for key in network_keys)
+        units = previous["units"].keys() | desired["units"].keys()
+        changed = {
+            unit
+            for unit in units
+            if self.unit_signature(previous, unit) != self.unit_signature(desired, unit)
+            or (network_changed and unit.endswith(("-gre.service", "-network.service")))
+        }
+        if any(unit.endswith("-gre.service") for unit in changed) and any(
+            unit.endswith("-network.service") for unit in units
+        ):
+            # systemd stops a Requires= consumer when its GRE dependency stops.
+            # Restart the coordinated network group even if rule text is equal.
+            network_changed = True
+            changed.update(
+                unit for unit in units if unit.endswith(("-gre.service", "-network.service"))
+            )
+        # Keep unrelated running units and their network state intact. Comparing
+        # referenced files also catches TLS identity changes behind a config.
         for unit in sorted(
-            previous["units"], key=lambda name: not name.endswith("-network.service")
+            changed & previous["units"].keys(),
+            key=lambda name: not name.endswith("-network.service"),
         ):
             run(["systemctl", "stop", unit])
             run(["systemctl", "disable", unit], check=False)
@@ -550,9 +652,10 @@ class Agent:
             if path.is_symlink() and str(path.readlink()).startswith(str(self.root) + "/current/"):
                 path.unlink()
         # Recover partially installed rules even if the unit never became active.
-        with (self.root / "network.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            self.network_down()
+        if network_changed:
+            with (self.root / "network.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                self.network_down()
         pointer = self.root / "current"
         if target:
             temporary = self.root / "current.next"
@@ -571,11 +674,11 @@ class Agent:
                     raise OperationError("ownership_conflict")
                 path.unlink()
             path.symlink_to(self.root / "current" / unit)
-        if shutil.which("iptables"):
+        if previous["firewall"] != desired["firewall"] and shutil.which("iptables"):
             self.firewall(desired["firewall"])
         run(["systemctl", "daemon-reload"])
         ordered = sorted(
-            desired["units"],
+            changed & desired["units"].keys(),
             key=lambda name: (
                 not name.endswith("-gre.service"),
                 name.endswith("-router.service"),
@@ -603,7 +706,7 @@ class Agent:
         plan = self.manifest(directory)
         for unit in plan["units"]:
             if run(["systemctl", "is-active", "--quiet", unit], check=False).returncode:
-                raise OperationError("health_failed") from None
+                raise OperationError("health_failed", {"check": "service", "unit": unit}) from None
         if plan.get("network_interfaces"):
             for key, (table, parent, chain) in self.network_chains().items():
                 if (
@@ -624,7 +727,10 @@ class Agent:
                 with socket.create_connection((endpoint["host"], endpoint["port"]), timeout=4):
                     pass
             except OSError:
-                raise OperationError("health_failed") from None
+                raise OperationError(
+                    "health_failed",
+                    {"check": "connection", "address": endpoint["host"], "port": endpoint["port"]},
+                ) from None
 
     def rollback(self, generation):
         directory = self.generation(generation)
@@ -684,7 +790,12 @@ def main():
         print("Installation resources removed; shared packages were preserved.")
         return
     request = json.load(sys.stdin)
-    agent = Agent(request["namespace"])
+    agent = Agent(
+        request["namespace"],
+        progress=lambda code, detail=None: print(
+            json.dumps({"event": code, "detail": detail or {}}), flush=True
+        ),
+    )
     lock = open(agent.root / "agent.lock", "a")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX)

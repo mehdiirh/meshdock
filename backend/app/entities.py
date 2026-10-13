@@ -106,6 +106,7 @@ class Job(Base):
     lease_until: Mapped[float | None] = mapped_column(Float)
     owner: Mapped[str | None] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(64))
+    cancel_requested: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     receipt: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
 
 

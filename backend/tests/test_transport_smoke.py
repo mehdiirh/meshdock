@@ -4,6 +4,8 @@ Set MESHDOCK_TEST_BIN_DIR to a directory containing checksum-verified platform b
 """
 
 import os
+import platform
+import shutil
 import socket
 import socketserver
 import ssl
@@ -15,7 +17,7 @@ from pathlib import Path
 import pytest
 from app.methods import REGISTRY
 from app.methods.base import Context
-from app.planner import empty
+from app.planner import empty, relay_config
 from app.ports import expand
 from app.topology import material
 
@@ -72,6 +74,18 @@ class Echo(socketserver.BaseRequestHandler):
             ("rathole", "rathole"),
             {"nodelay": False, "heartbeat_interval": 15, "heartbeat_timeout": 60},
         ),
+        *[
+            ("rathole", ("rathole", "rathole"), {"transport": transport})
+            for transport in ("tcp", "tls", "ws", "wss")
+        ],
+        *[
+            ("frp_wss", ("frps", "frpc"), {"transport": transport})
+            for transport in ("tcp", "kcp", "quic", "websocket")
+        ],
+        *[
+            ("backhaul", ("backhaul", "backhaul"), {"transport": transport})
+            for transport in ("wss", "wssmux")
+        ],
         ("frp_wss", ("frps", "frpc"), {}),
         ("frp_wss", ("frps", "frpc"), {"tcp_mux": False, "pool_count": 12}),
         ("hysteria2", ("hysteria", "hysteria"), {}),
@@ -94,9 +108,15 @@ class Echo(socketserver.BaseRequestHandler):
         ),
     ],
 )
-def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
+def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, tls_fault=None):
     if any(not (Path(BINARIES) / name).exists() for name in binaries):
         pytest.skip("Required test binary absent")
+    adapter = REGISTRY[method]
+    supported = adapter.transport({"settings": settings}).get("architectures", [])
+    if supported and platform.machine() not in supported:
+        pytest.skip("Pinned upstream release lacks this transport on this architecture")
+    if adapter.auxiliary_counts({"settings": settings})[1] and not shutil.which("haproxy"):
+        pytest.skip("Verified bridges require HAProxy; use the isolated Linux test image")
     for _ in range(30):
         echo = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Echo)
         first = echo.server_address[1]
@@ -131,6 +151,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
         "allocated_control": control_port,
         "internal_ports": [48021, 48023],
         "auxiliary_ports": [48025],
+        "exit_auxiliary_ports": [48027],
         "policy": "roundrobin",
         "weight": 1,
     }
@@ -139,6 +160,11 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
     )
     entry, exit = empty(), empty()
     REGISTRY[method].configure(context, entry, exit)
+    if tls_fault == "untrusted":
+        client_plan = entry if method == "hysteria2" else exit
+        for name in client_plan["files"]:
+            if name.endswith("-ca.crt"):
+                client_plan["files"][name] = material()["tls_cert"]
     processes = []
     streams = []
     relay = None
@@ -148,12 +174,30 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
             folder.mkdir()
             for name, content in plan["files"].items():
                 (folder / name).write_text(content.replace(context.root, str(folder)))
-            if method == "frp_wss" and role == "entry":
-                relay = TLSRelay(("127.0.0.1", context.control), RelayHandler)
-                relay.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-                relay.tls.load_cert_chain(folder / (context.filename + "-tls.pem"))
-                relay.target = ("127.0.0.1", context.auxiliary(0))
-                threading.Thread(target=relay.serve_forever, daemon=True).start()
+            if plan["relay"]:
+                if shutil.which("haproxy"):
+                    relay_file = folder / "haproxy.cfg"
+                    relay_file.write_text(
+                        (
+                            "global\n  maxconn 256\ndefaults\n  mode tcp\n  timeout connect 2s\n  timeout client 30s\n  timeout server 30s\n"
+                            + "".join(relay_config(item) for item in plan["relay"])
+                        ).replace(context.root, str(folder))
+                    )
+                    stream = (folder / "relay.log").open("wb")
+                    streams.append(stream)
+                    processes.append(
+                        subprocess.Popen(
+                            ["haproxy", "-db", "-f", str(relay_file)],
+                            stdout=stream,
+                            stderr=subprocess.STDOUT,
+                        )
+                    )
+                else:
+                    relay = TLSRelay(("127.0.0.1", context.control), RelayHandler)
+                    relay.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                    relay.tls.load_cert_chain(folder / (context.filename + "-tls.pem"))
+                    relay.target = ("127.0.0.1", context.auxiliary(0))
+                    threading.Thread(target=relay.serve_forever, daemon=True).start()
             config = folder / (context.filename + (".json" if method == "hysteria2" else ".toml"))
             command = [str(Path(BINARIES) / binary)]
             if method == "hysteria2":
@@ -162,7 +206,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
             stream = (folder / "output.log").open("wb")
             streams.append(stream)
             processes.append(subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT))
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + (6 if tls_fault else 30)
         while time.monotonic() < deadline:
             try:
                 for index in range(2):
@@ -173,14 +217,16 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
                         client.sendall(b"meshdock-roundtrip")
                         if client.recv(128) != b"meshdock-roundtrip":
                             raise OSError("Unexpected payload")
+                if tls_fault:
+                    pytest.fail("Untrusted TLS peer carried application traffic")
                 break
             except OSError:
                 pass
             time.sleep(0.3)
         else:
-            diagnostics = "\n".join(
-                (tmp_path / role / "output.log").read_text() for role in ("entry", "exit")
-            )
+            if tls_fault:
+                return
+            diagnostics = "\n".join(path.read_text() for path in tmp_path.rglob("*.log"))
             # Test data only, but redact random generated tokens too.
             pytest.fail(
                 "Transport did not carry loopback traffic: "
@@ -203,3 +249,27 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
         for server in (echo, second):
             server.shutdown()
             server.server_close()
+
+
+SECURE = (
+    [("backhaul", ("backhaul", "backhaul"), {"transport": t}) for t in ("wss", "wssmux")]
+    + [("rathole", ("rathole", "rathole"), {"transport": t}) for t in ("tls", "wss")]
+    + [
+        ("frp_wss", ("frps", "frpc"), {"transport": t})
+        for t in ("tcp", "kcp", "quic", "websocket", "wss")
+    ]
+    + [("hysteria2", ("hysteria", "hysteria"), {})]
+)
+
+
+@pytest.mark.skipif(not BINARIES, reason="Set MESHDOCK_TEST_BIN_DIR for TLS rejection tests")
+@pytest.mark.parametrize("method,binaries,settings", SECURE)
+@pytest.mark.parametrize("fault", ["untrusted", "wrong_hostname"])
+def test_tls_rejects_untrusted_or_wrong_name(
+    tmp_path, monkeypatch, method, binaries, settings, fault
+):
+    if fault == "wrong_hostname":
+        # The certificate is trusted but its SAN is wrong. Client verifiers
+        # retain the configured tunnel.internal name imported by each adapter.
+        monkeypatch.setattr("app.tls.TLS_SERVER_NAME", "wrong.internal")
+    test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, tls_fault=fault)

@@ -138,7 +138,10 @@ def test_host_replacement_includes_old_endpoint_for_cleanup(admin):
     with connect() as database:
         desired = topology.desired(database, True)
     fleet = targets(previous, desired)
-    assert len(fleet) == len(value["servers"]) + 1
+    # Only the replacement endpoint, its peers and old endpoint cleanup change.
+    unchanged = {value["servers"][1]["id"], value["servers"][4]["id"]}
+    assert not any(target.server["id"] in unchanged for target in fleet)
+    assert any(target.identity == "192.0.2.199:22" for target in fleet)
     old = next(t for t in fleet if t.identity == "192.0.2.10:22")
     assert not old.plan["units"]
 

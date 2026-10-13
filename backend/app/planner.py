@@ -6,6 +6,7 @@ from .allocation import allocate
 from .methods import REGISTRY
 from .methods.base import Context, service
 from .security import AppError, unseal
+from .tls import TLS_SERVER_NAME
 
 
 def empty():
@@ -120,14 +121,7 @@ defaults
             )
         relays = plan.pop("relay")
         for relay in relays:
-            tls = ""
-            if certificate := relay.get("certificate"):
-                tls = f" ssl crt {certificate} ssl-min-ver TLSv1.2"
-            config += (
-                f'listen relay_{relay["name"]}\n'
-                f'  bind {relay["bind"]}:{relay["port"]}{tls}\n'
-                f'  server target {relay["host"]}:{relay["target"]} check inter 3s\n'
-            )
+            config += relay_config(relay)
             plan["listeners"].append(relay["port"])
         if pool or relays:
             plan["files"]["haproxy.cfg"] = config
@@ -166,6 +160,7 @@ defaults
         nofile = max(65536, 2 * forwards + 4096)
         if pool or relays:
             nofile = max(nofile, len(plan["sockets"]) + 2 * 65536 + 4096)
+        nofile = 1 << (nofile - 1).bit_length()
         plan["resources"] = {
             "listeners": len(plan["sockets"]),
             "nofile": nofile if plan["units"] else 0,
@@ -174,7 +169,8 @@ defaults
             ),
         }
         for name, unit in plan["units"].items():
-            plan["units"][name] = unit.replace("LimitNOFILE=65536", f"LimitNOFILE={nofile}")
+            if "Type=oneshot\n" not in unit:
+                plan["units"][name] = unit.replace("LimitNOFILE=65536", f"LimitNOFILE={nofile}")
         plan["binaries"] = sorted(set(plan["binaries"]))
         plan["listeners"] = sorted(set(plan["listeners"]))
     return plans
@@ -194,3 +190,21 @@ def validate_bindings(plan):
                 and interval["start"] <= endpoint["port"] <= interval["end"]
             ):
                 raise AppError("control_port_conflict")
+
+
+def relay_config(relay):
+    """Render an owned relay with mandatory verification for upstream TLS."""
+    tls = ""
+    if certificate := relay.get("certificate"):
+        tls = f" ssl crt {certificate} ssl-min-ver TLSv1.2"
+    upstream_tls = ""
+    if ca := relay.get("trusted_ca"):
+        upstream_tls = (
+            f" ssl verify required ca-file {ca} verifyhost {TLS_SERVER_NAME}"
+            f" sni str({TLS_SERVER_NAME}) check-sni {TLS_SERVER_NAME} ssl-min-ver TLSv1.2"
+        )
+    return (
+        f'listen relay_{relay["name"]}\n'
+        f'  bind {relay["bind"]}:{relay["port"]}{tls}\n'
+        f'  server target {relay["host"]}:{relay["target"]}{upstream_tls} check inter 3s\n'
+    )

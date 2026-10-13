@@ -1,10 +1,13 @@
 import json
+from typing import Literal
 
 from .base import Adapter, service
 from .options import Options, option, toml_values
+from .tls_bridge import tls_server, verified_client
 
 
 class RatholeOptions(Options):
+    transport: Literal["tcp", "noise", "tls", "ws", "wss"] = option("noise")
     nodelay: bool = option(True)
     keepalive_secs: int = option(20, ge=1, le=3600, unit="seconds")
     keepalive_interval: int = option(8, ge=1, le=300, unit="seconds")
@@ -16,6 +19,20 @@ class RatholeOptions(Options):
 
 class Rathole(Adapter):
     options_model = RatholeOptions
+    transports = {
+        name: {
+            "encrypted": name in ("noise", "tls", "wss"),
+            "control_protocols": ["tcp"],
+            "tls_mode": "verified_bridge" if name in ("tls", "wss") else "none",
+            "architectures": ["x86_64"] if name in ("ws", "wss") else ["x86_64", "aarch64"],
+        }
+        for name in RatholeOptions.model_fields["transport"].annotation.__args__
+    }
+
+    def auxiliary_counts(self, link):
+        count = int(self.options(link).transport in ("tls", "wss"))
+        return count, count
+
     metadata = {
         "id": "rathole",
         "name": "Rathole",
@@ -27,23 +44,42 @@ class Rathole(Adapter):
 
     def configure(self, context, entry, exit):
         options = self.options(context.link)
+        if options.transport in ("ws", "wss"):
+            for plan in (entry, exit):
+                plan.setdefault("architecture_requirements", []).append(
+                    {
+                        "method": "rathole",
+                        "transport": options.transport,
+                        "supported": ["x86_64"],
+                    }
+                )
+        server_address = f"{context.entry['address']}:{context.control}"
+        remote_address = server_address
+        if options.transport in ("tls", "wss"):
+            server_address = tls_server(context, entry)
+            remote_address = verified_client(context, exit)
+        native_transport = {"tls": "tcp", "ws": "websocket", "wss": "websocket"}.get(
+            options.transport, options.transport
+        )
         server = f"""[server]
 heartbeat_interval = {options.heartbeat_interval}
-bind_addr = "{context.entry['address']}:{context.control}"
+bind_addr = "{server_address}"
 [server.transport]
-type = "noise"
-[server.transport.noise]
-local_private_key = {json.dumps(context.secrets['noise_private'])}
+type = "{native_transport}"
 """
         client = f"""[client]
 heartbeat_timeout = {options.heartbeat_timeout}
 retry_interval = {options.retry_interval}
-remote_addr = "{context.entry['address']}:{context.control}"
+remote_addr = "{remote_address}"
 [client.transport]
-type = "noise"
-[client.transport.noise]
-remote_public_key = {json.dumps(context.secrets['noise_public'])}
+type = "{native_transport}"
 """
+        if options.transport == "noise":
+            server += f'[server.transport.noise]\nlocal_private_key = {json.dumps(context.secrets["noise_private"])}\n'
+            client += f'[client.transport.noise]\nremote_public_key = {json.dumps(context.secrets["noise_public"])}\n'
+        if native_transport == "websocket":
+            server += "[server.transport.websocket]\ntls = false\n"
+            client += "[client.transport.websocket]\ntls = false\n"
         tcp = toml_values(
             {
                 key: getattr(options, key)

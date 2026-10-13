@@ -1,7 +1,18 @@
+
 msgid ""
 msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-10-14 00:24+0330\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
 
 msgid "applying"
 msgstr "Activating a new generation."
@@ -31,7 +42,9 @@ msgid "forbidden"
 msgstr "This action is not permitted."
 
 msgid "health_failed"
-msgstr "The tunnel or destination health check failed."
+msgstr ""
+"A managed service or destination did not become ready. Check the named service/endpoint, peer "
+"connectivity, transport ports and the destination application."
 
 msgid "host_key_changed"
 msgstr "SSH host key did not match the trusted fingerprint."
@@ -100,10 +113,14 @@ msgid "rolling_back"
 msgstr "Restoring the previous generation."
 
 msgid "ssh_auth"
-msgstr "Root SSH authentication failed."
+msgstr ""
+"Root SSH login was rejected. Check the saved password/key and whether the server permits root "
+"login with that method."
 
 msgid "ssh_unreachable"
-msgstr "The management SSH endpoint could not be reached."
+msgstr ""
+"Cannot reach management SSH. Check the server address, SSH port and firewall access from the "
+"MeshDock worker."
 
 msgid "succeeded"
 msgstr "Deployment is healthy."
@@ -136,13 +153,17 @@ msgid "control_port_conflict"
 msgstr "The transport port conflicts with another listener on this server."
 
 msgid "mapping_limit"
-msgstr "This method cannot deploy this many mapped ports. Reduce the range or choose a method with native ranges."
+msgstr ""
+"This method cannot deploy this many mapped ports. Reduce the range or choose a method with native"
+" ranges."
 
 msgid "ssh_port_conflict"
 msgstr "The mapping includes the entry server’s SSH port. Add it to the explicit exceptions."
 
 msgid "range_pool_conflict"
-msgstr "A native GRE range overlaps another connection on this entry. Use disjoint ranges or explicit exceptions."
+msgstr ""
+"A native GRE range overlaps another connection on this entry. Use disjoint ranges or explicit "
+"exceptions."
 
 msgid "port_capacity"
 msgstr "No free transport listener allocation remains on this server."
@@ -154,15 +175,97 @@ msgid "range_kernel_unsupported"
 msgstr "Shifted GRE port ranges require Linux kernel 4.18 or newer."
 
 msgid "listener_conflict"
-msgstr "An existing service occupies a required listener. Add an exception or change the mapping/control port. Conflict details follow."
+msgstr ""
+"An existing service occupies a required listener. Add an exception or change the mapping/control "
+"port. Conflict details follow."
 
 msgid "range_target_conflict"
 msgstr "GRE target ranges overlap for different destination hosts on the same connection."
 
 msgid "descriptor_capacity"
-msgstr "The server file-descriptor limits cannot accommodate this deployment. Review the required and available capacity."
+msgstr ""
+"The server file-descriptor limits cannot accommodate this deployment. Review the required and "
+"available capacity."
 
 msgid "outgoing_port_capacity"
-msgstr "The mapping occupies all automatic outgoing TCP ports on this server’s egress address. Add explicit exceptions within the reported range, use a separate ingress address, or choose kernel forwarding."
+msgstr ""
+"The mapping occupies all automatic outgoing TCP ports on this server’s egress address. Add "
+"explicit exceptions within the reported range, use a separate ingress address, or choose kernel "
+"forwarding."
+
 msgid "invalid_method_settings"
 msgstr "Invalid method settings. Check supported options, limits, and dependencies."
+
+msgid "transport_architecture_unsupported"
+msgstr ""
+"The pinned Rathole ARM64 release does not include WebSocket. Select TCP, Noise or TLS, or use "
+"x86_64 servers for WS/WSS. No existing tunnel was replaced."
+
+msgid "deployment_cancelled"
+msgstr ""
+"Deployment cancelled. No new steps will run; any activated changes were rolled back. The desired "
+"topology remains editable."
+
+msgid "command_timeout"
+msgstr ""
+"A server operation timed out. Check the reported command and server connectivity; rollback "
+"follows before another attempt."
+
+msgid "package_lock"
+msgstr ""
+"Another package manager holds the installation lock. Let the existing update finish, then retry. "
+"Do not delete package lock files."
+
+msgid "package_dns"
+msgstr ""
+"The server cannot resolve a package repository hostname. Fix DNS/outbound access on that server, "
+"then retry."
+
+msgid "package_repository"
+msgstr ""
+"A configured package repository is invalid or has no Release file. Repair the server’s APT "
+"repository configuration, then retry."
+
+msgid "disk_full"
+msgstr "The server has no disk space left. Free space for packages and managed generations, then retry."
+
+msgid "package_missing"
+msgstr ""
+"A required package is absent from the server’s package indexes. Check enabled Ubuntu/Debian "
+"repositories and update the indexes."
+
+msgid "package_tls"
+msgstr ""
+"TLS verification of a package repository failed. Check the server clock, CA certificates and "
+"repository HTTPS configuration."
+
+msgid "dependencies_checking"
+msgstr "Checking required packages."
+
+msgid "packages_installing"
+msgstr "Installing missing packages; the current package operation may take several minutes."
+
+msgid "dependencies_ready"
+msgstr "Required packages are ready."
+
+msgid "binary_downloading"
+msgstr "Downloading the pinned transport binary."
+
+msgid "binary_verified"
+msgstr "Transport binary checksum verified."
+
+msgid "preflight_checking"
+msgstr "Checking server prerequisites, ownership, listeners and capacity."
+
+msgid "preflight_passed"
+msgstr "Server preflight checks passed."
+
+msgid "configuration_validating"
+msgstr "Staged files written; validating configuration before activation."
+
+msgid "configuration_ready"
+msgstr "Configuration validated and ready for activation."
+
+
+msgid "package_network"
+msgstr "The package repository connection failed. Check outbound connectivity and the reported package command; MeshDock uses IPv4 for package downloads."
