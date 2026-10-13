@@ -85,8 +85,16 @@ def resolve(db, link_id, revision, actor, *, restore):
             continue
         current = servers.get(server["id"])
         if current and any(
-            current[key] != server[key]
-            for key in ("host", "ssh_port", "address", "credential_id", "fingerprint", "role")
+            current.get(key) != server.get(key)
+            for key in (
+                "host",
+                "ssh_port",
+                "address",
+                "credential_id",
+                "fingerprint",
+                "role",
+                "ssh_jump",
+            )
         ):
             raise AppError("restore_endpoint_changed", 409)
         servers.setdefault(server["id"], public_server(server))

@@ -275,3 +275,15 @@ msgstr "Wait for the current deployment to finish before retrying or restoring a
 
 msgid "restore_endpoint_changed"
 msgstr "The endpoint settings changed after deployment. Restore those settings before restoring this connection."
+
+msgid "ssh_jump_unreachable"
+msgstr "The SSH jump host is unreachable. Check its address, port and controller access."
+
+msgid "ssh_jump_auth"
+msgstr "SSH jump-host authentication failed. Check its username and saved credential."
+
+msgid "ssh_jump_host_key_changed"
+msgstr "The SSH jump host key changed. Verify its fingerprint before reconnecting."
+
+msgid "ssh_jump_forward_failed"
+msgstr "The jump host could not open the target SSH connection. Check TCP forwarding permission and target reachability from the jump host."

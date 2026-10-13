@@ -52,6 +52,9 @@ class Server(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
     host: Mapped[str] = mapped_column(String(253))
+    ssh_jump: Mapped[str] = mapped_column(
+        Text, nullable=False, default="null", server_default="null"
+    )
     ssh_port: Mapped[int] = mapped_column(Integer)
     role: Mapped[str] = mapped_column(String(16))
     address: Mapped[str] = mapped_column(String(45))

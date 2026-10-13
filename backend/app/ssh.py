@@ -7,6 +7,7 @@ import json
 import re
 import socket
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import paramiko
@@ -18,26 +19,98 @@ def fingerprint(key):
     return "SHA256:" + base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode().rstrip("=")
 
 
-def transport(host, port):
-    sock = socket.create_connection((host, port), timeout=15)
-    t = paramiko.Transport(sock)
+def transport(host, port, sock=None):
+    sock = sock if sock is not None else socket.create_connection((host, port), timeout=15)
+    session = None
     try:
-        t.start_client(timeout=15)
-        return t
+        session = paramiko.Transport(sock)
+        session.auth_timeout = 15
+        session.banner_timeout = 15
+        session.start_client(timeout=15)
+        return session
     except Exception:
-        t.close()
+        if session is not None:
+            session.close()
+        sock.close()
         raise
 
 
-def discover(host, port):
-    t = transport(host, port)
+def authenticate(session, endpoint, credential, *, jump=False):
+    prefix = "ssh_jump_" if jump else ""
+    if fingerprint(session.get_remote_server_key()) != endpoint["fingerprint"]:
+        raise AppError(prefix + "host_key_changed")
     try:
-        return {
-            "fingerprint": fingerprint(t.get_remote_server_key()),
-            "algorithm": t.get_remote_server_key().get_name(),
-        }
+        username = endpoint.get("username", "root") if jump else "root"
+        if credential["kind"] == "password":
+            session.auth_password(username, credential["secret"])
+        else:
+            session.auth_publickey(
+                username, private_key(credential["secret"], credential.get("passphrase", ""))
+            )
+        if not session.is_authenticated():
+            raise paramiko.AuthenticationException()
+        session.set_keepalive(20)
+    except (paramiko.SSHException, OSError):
+        raise AppError("ssh_jump_auth" if jump else "ssh_auth") from None
+
+
+class SSHConnection:
+    """An end-to-end SSH session, optionally carried by a pinned jump host."""
+
+    def __init__(self, endpoint, credentials=None, *, discover_only=False):
+        self.target = None
+        self.jump = None
+        self.channel = None
+        jump = endpoint.get("ssh_jump")
+        try:
+            if jump:
+                try:
+                    self.jump = transport(jump["host"], jump["ssh_port"])
+                except (OSError, paramiko.SSHException):
+                    raise AppError("ssh_jump_unreachable", 502) from None
+                authenticate(self.jump, jump, credentials["jump"], jump=True)
+                try:
+                    self.channel = self.jump.open_channel(
+                        "direct-tcpip",
+                        dest_addr=(endpoint["host"], endpoint["ssh_port"]),
+                        src_addr=("127.0.0.1", 0),
+                        timeout=15,
+                    )
+                except (OSError, paramiko.SSHException):
+                    raise AppError("ssh_jump_forward_failed", 502) from None
+            try:
+                if self.channel is None:
+                    self.target = transport(endpoint["host"], endpoint["ssh_port"])
+                else:
+                    self.target = transport(endpoint["host"], endpoint["ssh_port"], self.channel)
+            except (OSError, paramiko.SSHException):
+                raise AppError("ssh_unreachable", 502) from None
+            if not discover_only:
+                authenticate(self.target, endpoint, credentials)
+        except Exception:
+            self.close()
+            raise
+
+    def close(self):
+        for name in ("target", "channel", "jump"):
+            resource = getattr(self, name)
+            if resource is not None:
+                setattr(self, name, None)
+                with suppress(Exception):
+                    resource.close()
+
+
+def discover(host, port, jump=None, jump_credential=None):
+    connection = SSHConnection(
+        {"host": host, "ssh_port": port, "ssh_jump": jump},
+        {"jump": jump_credential},
+        discover_only=True,
+    )
+    try:
+        key = connection.target.get_remote_server_key()
+        return {"fingerprint": fingerprint(key), "algorithm": key.get_name()}
     finally:
-        t.close()
+        connection.close()
 
 
 def private_key(secret, passphrase=""):
@@ -113,31 +186,14 @@ class Remote:
         self.server = server
         self.ns = namespace
         try:
-            self.t = transport(server["host"], server["ssh_port"])
-        except (OSError, paramiko.SSHException):
-            raise AppError("ssh_unreachable", details={"server_id": server["id"]}) from None
-        try:
-            if fingerprint(self.t.get_remote_server_key()) != server["fingerprint"]:
-                raise AppError("host_key_changed")
-            if credential["kind"] == "password":
-                self.t.auth_password("root", credential["secret"])
-            else:
-                self.t.auth_publickey(
-                    "root",
-                    private_key(credential["secret"], credential.get("passphrase", "")),
-                )
-            self.t.set_keepalive(20)
-            if not self.t.is_authenticated():
-                raise AppError("ssh_auth")
-        except paramiko.AuthenticationException:
-            self.t.close()
-            raise AppError("ssh_auth", details={"server_id": server["id"]}) from None
-        except Exception:
-            self.t.close()
+            self.connection = SSHConnection(server, credential)
+            self.t = self.connection.target
+        except AppError as error:
+            error.details = {"server_id": server["id"]}
             raise
 
     def close(self):
-        self.t.close()
+        self.connection.close()
 
     def command(self, command, data=b"", timeout=360, stream=False):
         ch = self.t.open_session(timeout=15)

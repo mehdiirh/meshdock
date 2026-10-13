@@ -12,8 +12,15 @@ def affected_links(previous, desired):
         for link in allocate(snapshot):
             endpoints = [
                 {
-                    key: servers[link[side]][key]
-                    for key in ("host", "ssh_port", "address", "credential_id", "fingerprint")
+                    key: servers[link[side]].get(key)
+                    for key in (
+                        "host",
+                        "ssh_port",
+                        "address",
+                        "credential_id",
+                        "fingerprint",
+                        "ssh_jump",
+                    )
                 }
                 for side in ("entry_id", "exit_id")
             ]

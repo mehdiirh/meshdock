@@ -51,7 +51,26 @@ class Host(Model):
         return v.lower()
 
 
-class Server(Host):
+class JumpHost(Host):
+    username: str = Field(default="root", pattern=r"^[a-zA-Z_][a-zA-Z0-9_.-]{0,63}[$]?$")
+    credential_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    fingerprint: str = Field(pattern=r"^SHA256:[A-Za-z0-9+/]{43}$")
+
+
+class AccessHost(Host):
+    ssh_jump: JumpHost | None = None
+
+    @model_validator(mode="after")
+    def different_jump_endpoint(self):
+        if self.ssh_jump and (self.host, self.ssh_port) == (
+            self.ssh_jump.host,
+            self.ssh_jump.ssh_port,
+        ):
+            raise ValueError("jump_host_is_target")
+        return self
+
+
+class Server(AccessHost):
     id: str = Field(pattern=r"^[a-f0-9]{32}$")
     name: str = Field(min_length=1, max_length=80)
     role: Literal["entry", "exit", "both"]

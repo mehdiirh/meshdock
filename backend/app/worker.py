@@ -10,8 +10,9 @@ from . import settings
 from .artifacts import ARTIFACTS
 from .db import audit, connect, initialize, log, uid
 from .planner import build, empty
-from .security import AppError, unseal
+from .security import AppError
 from .ssh import Remote
+from .ssh_access import access_credentials
 
 TERMINAL = {"succeeded", "failed", "superseded", "recovery_required", "cancelled"}
 
@@ -169,13 +170,8 @@ class Worker:
 
     def remote(self, server, namespace):
         with connect() as database:
-            row = database.execute(
-                "SELECT encrypted FROM credentials WHERE id=?",
-                (server["credential_id"],),
-            ).fetchone()
-        if not row:
-            raise AppError("not_found")
-        return self.remote_factory(server, unseal(row["encrypted"]), namespace)
+            credentials = access_credentials(database, server)
+        return self.remote_factory(server, credentials, namespace)
 
     def operate(self, server, namespace, action, payload, *, install=False):
         with connect() as database:

@@ -47,6 +47,7 @@ def desired(db, private=False):
     for row in db.execute("SELECT * FROM servers WHERE deleted=0 ORDER BY created,id"):
         s = dict(row)
         s["position"] = json.loads(s["position"])
+        s["ssh_jump"] = json.loads(s["ssh_jump"])
         s.pop("deleted")
         s.pop("created")
         servers.append(s)
@@ -81,7 +82,11 @@ def validate(db, body):
     ) != len(servers):
         raise AppError("duplicate_host")
     credentials = {r[0] for r in db.execute("SELECT id FROM credentials")}
-    if any(s.credential_id not in credentials for s in body.servers):
+    if any(
+        s.credential_id not in credentials
+        or (s.ssh_jump and s.ssh_jump.credential_id not in credentials)
+        for s in body.servers
+    ):
         raise AppError("not_found", 404)
     ports = {}
     graph = {}
@@ -197,8 +202,8 @@ def save(db, body, actor):
         v = s.model_dump()
         pos = json.dumps(v.pop("position"))
         db.execute(
-            """INSERT INTO servers(id,name,host,ssh_port,role,address,credential_id,fingerprint,region,position,created)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,host=excluded.host,ssh_port=excluded.ssh_port,role=excluded.role,address=excluded.address,credential_id=excluded.credential_id,fingerprint=excluded.fingerprint,region=excluded.region,position=excluded.position,deleted=0""",
+            """INSERT INTO servers(id,name,host,ssh_port,role,address,credential_id,fingerprint,region,position,created,ssh_jump)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,host=excluded.host,ssh_port=excluded.ssh_port,role=excluded.role,address=excluded.address,credential_id=excluded.credential_id,fingerprint=excluded.fingerprint,region=excluded.region,position=excluded.position,ssh_jump=excluded.ssh_jump,deleted=0""",
             (
                 s.id,
                 s.name,
@@ -211,6 +216,7 @@ def save(db, body, actor):
                 s.region,
                 pos,
                 time.time(),
+                json.dumps(s.ssh_jump.model_dump() if s.ssh_jump else None),
             ),
         )
     db.execute("DELETE FROM links")

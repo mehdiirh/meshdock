@@ -7,6 +7,7 @@ from .. import schemas as models
 from .. import settings, ssh
 from ..db import audit, connect, uid
 from ..security import AppError, require, seal
+from ..ssh_access import credential, credential_ids
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ def credentials(actor=Depends(require("admin"))):
 
 
 @router.post("/credentials", status_code=201)
-def credential(body: models.Credential, actor=Depends(require("admin"))):
+def create_credential(body: models.Credential, actor=Depends(require("admin"))):
     if body.kind == "key":
         ssh.private_key(body.secret, body.passphrase)
     id = uid()
@@ -44,13 +45,15 @@ def delete_credential(id: str, actor=Depends(require("admin"))):
         refs = [
             json.loads(r[0])
             for r in db.execute(
-                "SELECT snapshot FROM jobs WHERE status IN ('running','queued','retrying','recovery_required')"
+                "SELECT snapshot FROM jobs WHERE status IN ('running','queued','retrying','recovering','recovery_required')"
             )
         ]
         refs.append(json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0]))
-        if db.execute(
-            "SELECT 1 FROM servers WHERE credential_id=? AND deleted=0", (id,)
-        ).fetchone() or any(s["credential_id"] == id for r in refs for s in r.get("servers", [])):
+        active = [dict(row) for row in db.execute("SELECT * FROM servers WHERE deleted=0")]
+        referenced = active + [
+            server for snapshot in refs for server in snapshot.get("servers", [])
+        ]
+        if any(id in credential_ids(server) for server in referenced):
             raise AppError("credential_in_use", 409)
         db.execute("DELETE FROM servers WHERE credential_id=? AND deleted=1", (id,))
         db.execute("DELETE FROM credentials WHERE id=?", (id,))
@@ -59,7 +62,10 @@ def delete_credential(id: str, actor=Depends(require("admin"))):
 
 
 @router.post("/servers/discover")
-def discover(body: models.Host, actor=Depends(require("admin"))):
+def discover(body: models.AccessHost, actor=Depends(require("admin"))):
+    jump = body.ssh_jump.model_dump() if body.ssh_jump else None
+    with connect() as db:
+        jump_credential = credential(db, jump["credential_id"]) if jump else None
     if settings.DEMO:
         return {
             "fingerprint": "SHA256:" + "A" * 43,
@@ -67,6 +73,8 @@ def discover(body: models.Host, actor=Depends(require("admin"))):
             "simulated": True,
         }
     try:
-        return ssh.discover(body.host, body.ssh_port)
+        return ssh.discover(body.host, body.ssh_port, jump, jump_credential)
+    except AppError:
+        raise
     except Exception:
         raise AppError("ssh_unreachable", 502) from None
