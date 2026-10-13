@@ -54,9 +54,21 @@ export interface SettingsSchema {
     when?: SettingCondition;
   }[];
 }
+export interface PendingRemoval {
+  link: Link;
+  status:
+    | "failed"
+    | "cancelled"
+    | "pending"
+    | "removing"
+    | "retrying"
+    | "recovery_required";
+}
 export interface Topology {
   revision: number;
   applied_revision: number;
+  pending_removals?: PendingRemoval[];
+  removal_servers?: Server[];
   namespace: string;
   servers: Server[];
   links: Link[];

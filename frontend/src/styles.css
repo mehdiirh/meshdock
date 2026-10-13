@@ -2036,3 +2036,36 @@ fieldset.field legend {
   border-color: var(--muted);
   color: var(--text);
 }
+
+.removal-banner {
+  position: absolute;
+  inset-inline-start: 14px;
+  top: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 28px);
+  padding: 12px 16px;
+  border: 1px solid var(--danger);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--danger);
+  box-shadow: 0 4px 18px #0002;
+  font-size: 12px;
+}
+.removal-summary {
+  display: grid;
+  gap: 18px;
+  margin: 24px 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.removal-summary .pill {
+  justify-self: start;
+}
+.removal-actions {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}

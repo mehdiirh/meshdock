@@ -1,4 +1,9 @@
-import { removeServer, replaceServer, replaceLink } from "../topology";
+import {
+  removeServer,
+  replaceServer,
+  replaceLink,
+  visibleTopology,
+} from "../topology";
 import { linkDeploymentStatus, failedDeployment } from "../deployments";
 import { compactPorts } from "../ports";
 import { useCallback, useEffect, useState } from "react";
@@ -38,6 +43,7 @@ import { newId, type Server, type Link, type Topology } from "../types";
 import { ServerNode, type ServerFlowNode } from "./ServerNode";
 import { ServerDialog } from "./ServerDialog";
 import { LinkPanel } from "./LinkPanel";
+import { RemovalPanel } from "./RemovalPanel";
 import { Jobs } from "./Jobs";
 import { Modal, Confirm, Spinner, ErrorMessage } from "./Primitives";
 const nodeTypes = { server: ServerNode };
@@ -69,6 +75,7 @@ export function Workspace({
   const [search, setSearch] = useState("");
   const [serverDialog, setServerDialog] = useState<Server | "new" | null>(null);
   const [draft, setDraft] = useState<Link | null>(null);
+  const [selectedRemoval, setSelectedRemoval] = useState<string | null>(null);
   const [batch, setBatch] = useState<Connection[]>([]);
   const [confirm, setConfirm] = useState<{
     title: string;
@@ -78,6 +85,12 @@ export function Workspace({
   const [notice, setNotice] = useState("");
   const [planOpen, setPlanOpen] = useState(false);
   const topology = query.data;
+  const visible = topology
+    ? visibleTopology(topology)
+    : { servers: [], links: [] };
+  const removal = topology?.pending_removals?.find(
+    (item) => item.link.id === selectedRemoval,
+  );
   const plan = useQuery({
     queryKey: ["preview", topology?.revision],
     queryFn: () =>
@@ -120,14 +133,27 @@ export function Workspace({
   useEffect(() => {
     if (!topology) return;
     setNodes((old) =>
-      topology.servers.map((server) => ({
+      visibleTopology(topology).servers.map((server) => ({
         id: server.id,
         type: "server",
         position: server.position,
+        draggable: topology.servers.some((s) => s.id === server.id),
         selected: old.find((n) => n.id === server.id)?.selected,
         data: {
           server,
+          readOnly: !topology.servers.some((s) => s.id === server.id),
           status: (() => {
+            const removalStates = (topology.pending_removals || []).filter(
+              (item) =>
+                item.link.entry_id === server.id ||
+                item.link.exit_id === server.id,
+            );
+            if (removalStates.length)
+              return removalStates.some(
+                (item) => item.status === "recovery_required",
+              )
+                ? "recovery_required"
+                : "failed";
             const states = topology.links
               .filter(
                 (l) =>
@@ -148,19 +174,35 @@ export function Workspace({
               "succeeded"
             );
           })(),
-          edit: () => setServerDialog(server),
+          edit: () => {
+            if (topology.servers.some((s) => s.id === server.id))
+              setServerDialog(server);
+            else {
+              setDraft(null);
+              setSelectedRemoval(
+                topology.pending_removals?.find(
+                  (item) =>
+                    item.link.entry_id === server.id ||
+                    item.link.exit_id === server.id,
+                )?.link.id || null,
+              );
+            }
+          },
         },
       })),
     );
     setEdges(
-      topology.links.map((l) => {
+      visibleTopology(topology).links.map((l) => {
+        const pendingRemoval = topology.pending_removals?.find(
+          (item) => item.link.id === l.id,
+        );
         const status = linkDeploymentStatus(
           l.id,
           topology.revision,
           topology.applied_revision,
           jobs.data,
         );
-        const failed = failedDeployment(status);
+        const failed = !!pendingRemoval || failedDeployment(status);
         const color = !l.enabled
           ? "#60716c"
           : failed
@@ -176,9 +218,18 @@ export function Workspace({
           target: l.exit_id,
           label:
             l.method.replaceAll("_", " ").toUpperCase() +
-            (failed ? " · " + t("status." + status) : ""),
+            (pendingRemoval
+              ? " · " + t("removal.status." + pendingRemoval.status)
+              : failed
+                ? " · " + t("status." + status)
+                : ""),
           type: "smoothstep",
-          className: failed ? "deployment-failed" : "",
+          className: pendingRemoval
+            ? "deployment-failed pending-removal"
+            : failed
+              ? "deployment-failed"
+              : "",
+          reconnectable: !pendingRemoval,
           animated: l.enabled && !failed && status !== "queued",
           style: {
             stroke: color,
@@ -221,6 +272,7 @@ export function Workspace({
       connection.source !== connection.target
     ) {
       setBatch([]);
+      setSelectedRemoval(null);
       setDraft(blankLink(connection.source, connection.target));
     }
   }, []);
@@ -264,7 +316,7 @@ export function Workspace({
   function arrange() {
     if (!topology) return;
     const counters = { entry: 0, both: 0, exit: 0 };
-    const updated = topology.servers.map((s) => ({
+    const updated = visible.servers.map((s) => ({
       ...s,
       position: {
         x: { entry: 60, both: 380, exit: 700 }[s.role],
@@ -278,12 +330,20 @@ export function Workspace({
       })),
     );
     positions.mutate(
-      Object.fromEntries(updated.map((s) => [s.id, s.position])),
+      Object.fromEntries(
+        updated
+          .filter((s) =>
+            topology.servers.some((current) => current.id === s.id),
+          )
+          .map((s) => [s.id, s.position]),
+      ),
     );
     setTimeout(() => void flow.fitView({ padding: 0.15, duration: 500 }), 100);
   }
   function connectSelection() {
-    const selected = nodes.filter((n) => n.selected).map((n) => n.data.server);
+    const selected = nodes
+      .filter((n) => n.selected && !n.data.readOnly)
+      .map((n) => n.data.server);
     const pairs = selected
       .filter((s) => s.role !== "exit")
       .flatMap((a) =>
@@ -301,6 +361,7 @@ export function Workspace({
       return;
     }
     setBatch(pairs);
+    setSelectedRemoval(null);
     setDraft(blankLink(pairs[0].source, pairs[0].target));
   }
   if (query.isPending)
@@ -342,12 +403,12 @@ export function Workspace({
           </span>
           <span>
             <small>{t("servers")}</small>
-            <strong>{String(topology.servers.length).padStart(2, "0")}</strong>
+            <strong>{String(visible.servers.length).padStart(2, "0")}</strong>
           </span>
           <span className="metric-detail">
-            {topology.servers.filter((s) => s.role === "entry").length}{" "}
+            {visible.servers.filter((s) => s.role === "entry").length}{" "}
             {t("entry")} /{" "}
-            {topology.servers.filter((s) => s.role === "exit").length}{" "}
+            {visible.servers.filter((s) => s.role === "exit").length}{" "}
             {t("exit")}
           </span>
         </div>
@@ -358,7 +419,7 @@ export function Workspace({
           <span>
             <small>{t("connections")}</small>
             <strong>
-              {String(topology.links.filter((l) => l.enabled).length).padStart(
+              {String(visible.links.filter((l) => l.enabled).length).padStart(
                 2,
                 "0",
               )}
@@ -597,15 +658,28 @@ export function Workspace({
                 b.role !== "entry"
               );
             }}
-            onNodeDoubleClick={(_, node) => setServerDialog(node.data.server)}
+            onNodeDoubleClick={(_, node) => node.data.edit()}
             onNodeDragStop={(_, node) =>
               positions.mutate({ [node.id]: node.position })
             }
             onEdgeClick={(_, edge) => {
               setBatch([]);
-              setDraft(topology.links.find((l) => l.id === edge.id) || null);
+              if (
+                topology.pending_removals?.some(
+                  (item) => item.link.id === edge.id,
+                )
+              ) {
+                setDraft(null);
+                setSelectedRemoval(edge.id);
+              } else {
+                setSelectedRemoval(null);
+                setDraft(topology.links.find((l) => l.id === edge.id) || null);
+              }
             }}
-            onPaneClick={() => setDraft(null)}
+            onPaneClick={() => {
+              setDraft(null);
+              setSelectedRemoval(null);
+            }}
             deleteKeyCode={null}
             fitView
             fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
@@ -625,7 +699,19 @@ export function Workspace({
               zoomable
             />
           </ReactFlow>
-          {!topology.servers.length && (
+          {!!topology.pending_removals?.length && (
+            <button
+              className="removal-banner"
+              onClick={() => {
+                setDraft(null);
+                setSelectedRemoval(topology.pending_removals![0].link.id);
+              }}
+            >
+              <span className="status-dot failed" />
+              {t("removal.review", { count: topology.pending_removals.length })}
+            </button>
+          )}
+          {!visible.servers.length && (
             <div className="empty-canvas">
               <div className="empty-icon">
                 <Waypoints size={42} />
@@ -651,7 +737,16 @@ export function Workspace({
           )}
           <div className="canvas-hint">{t("dragHint")}</div>
         </div>
-        {draft && (
+        {removal && (
+          <RemovalPanel
+            key={removal.link.id}
+            removal={removal}
+            servers={visible.servers}
+            revision={topology.revision}
+            onClose={() => setSelectedRemoval(null)}
+          />
+        )}
+        {draft && !removal && (
           <LinkPanel
             key={draft.id + draft.entry_id + draft.exit_id}
             link={draft}
@@ -683,7 +778,7 @@ export function Workspace({
           />
         )}
       </div>
-      <Jobs servers={topology.servers} />
+      <Jobs servers={visible.servers} />
       {serverDialog && (
         <>
           <ServerDialog

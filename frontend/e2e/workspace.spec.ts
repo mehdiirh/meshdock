@@ -391,3 +391,127 @@ test("deployment panel resizes by dragging and keyboard without leaving the view
     path: test.info().outputPath("resizable-deployments.png"),
   });
 });
+
+for (const operation of ["restore", "retry-removal"] as const) {
+  test(`failed removal stays on canvas and ${operation} resolves it`, async ({
+    page,
+  }) => {
+    let state = {
+      ...topology,
+      revision: 2,
+      links: [] as typeof topology.links,
+      servers: [topology.servers[0]],
+      removal_servers: [topology.servers[1]],
+      pending_removals: [{ link: topology.links[0], status: "failed" }],
+    };
+    let requests = 0;
+    await page.route("**/api/v1/topology", (route) =>
+      route.fulfill({ json: state }),
+    );
+    await page.route(`**/api/v1/links/${edge}/${operation}`, async (route) => {
+      requests++;
+      expect(route.request().postDataJSON()).toEqual({ revision: 2 });
+      state =
+        operation === "restore"
+          ? {
+              ...state,
+              pending_removals: [],
+              removal_servers: [],
+              links: topology.links,
+              servers: topology.servers,
+            }
+          : {
+              ...state,
+              pending_removals: [
+                { link: topology.links[0], status: "pending" },
+              ],
+            };
+      await route.fulfill({
+        status: 202,
+        json: { revision: 3, job_id: "removal-test" },
+      });
+    });
+    await page.reload();
+    await expect(page.locator(".server-node")).toHaveCount(2);
+    await expect(page.locator(".react-flow__edge.pending-removal")).toHaveCount(
+      1,
+    );
+    await expect(page.locator(".react-flow__edge-text")).toContainText(
+      "Removal failed — still deployed",
+    );
+    await page.locator(".removal-banner").click();
+    const panel = page.getByRole("complementary", {
+      name: "Unfinished removal",
+    });
+    await expect(panel).toContainText("Entry fixture → Exit fixture");
+    await expect(
+      panel.getByRole("button", { name: "Retry removal" }),
+    ).toBeEnabled();
+    await expect(
+      panel.getByRole("button", { name: "Restore connection" }),
+    ).toBeEnabled();
+    await page.screenshot({
+      path: test.info().outputPath(`failed-removal-${operation}.png`),
+      animations: "disabled",
+    });
+    await panel
+      .getByRole("button", {
+        name: operation === "restore" ? "Restore connection" : "Retry removal",
+      })
+      .click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    if (operation === "retry-removal") {
+      await expect(
+        panel.getByRole("button", { name: "Retry removal" }),
+      ).toBeDisabled();
+      await expect(panel).toContainText("Removal pending");
+      await page.reload();
+      await expect(
+        page.locator(".react-flow__edge.pending-removal"),
+      ).toHaveCount(1);
+      state = { ...state, pending_removals: [], removal_servers: [] };
+      await page.reload();
+    }
+    await expect(page.locator(".react-flow__edge.pending-removal")).toHaveCount(
+      0,
+    );
+    await expect(page.locator(".react-flow__edge")).toHaveCount(
+      operation === "restore" ? 1 : 0,
+    );
+    expect(requests).toBe(1);
+  });
+}
+
+test("uncertain removal stays visible and requires recovery before actions", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/topology", (route) =>
+    route.fulfill({
+      json: {
+        ...topology,
+        revision: 2,
+        links: [],
+        pending_removals: [
+          { link: topology.links[0], status: "recovery_required" },
+        ],
+      },
+    }),
+  );
+  await page.reload();
+  await page.locator(".removal-banner").click();
+  const panel = page.getByRole("complementary", { name: "Unfinished removal" });
+  await expect(panel).toContainText("current state is uncertain");
+  await expect(
+    panel.getByRole("button", { name: "Retry removal" }),
+  ).toBeDisabled();
+  await expect(
+    panel.getByRole("button", { name: "Restore connection" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Change language", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator(".removal-panel")).toContainText(
+    "وضعیت فعلی آن قطعی نیست",
+  );
+});

@@ -295,5 +295,26 @@
       "checking": "Checking health",
       "committing": "Confirming deployment"
     }
+  },
+  "removal": {
+    "title": "Unfinished removal",
+    "review_one": "1 unfinished removal · Review",
+    "review_other": "{{count}} unfinished removals · Review",
+    "status": {
+      "failed": "Removal failed — still deployed",
+      "cancelled": "Removal cancelled — still deployed",
+      "pending": "Removal pending",
+      "removing": "Removing — awaiting confirmation",
+      "retrying": "Removal retrying",
+      "recovery_required": "Removal unresolved — recovery required"
+    },
+    "explanation": "This connection belongs to the last successfully applied configuration. It stays visible until removal succeeds or you restore it. This is deployment history, not a live connectivity check.",
+    "uncertain": "Rollback has not finished on every server. This connection may still be deployed; its current state is uncertain.",
+    "retry": "Retry removal",
+    "restore": "Restore connection",
+    "retryHint": "Retry deployment of the current requested configuration, including other pending changes. The connection remains visible until removal succeeds.",
+    "restoreHint": "Put this connection and any missing endpoint servers back into the requested configuration using its original settings. Queue reconciliation, including any other pending changes.",
+    "recoverFirst": "Complete recovery in the deployment panel before retrying or restoring.",
+    "wait": "Wait for the current deployment to finish."
   }
 }

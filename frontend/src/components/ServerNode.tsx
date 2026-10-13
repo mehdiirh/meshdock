@@ -9,7 +9,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { Server } from "../types";
 export type ServerFlowNode = Node<
-  { server: Server; status: string; edit: () => void },
+  { server: Server; status: string; edit: () => void; readOnly?: boolean },
   "server"
 >;
 export const ServerNode = memo(function ServerNode({
@@ -31,7 +31,7 @@ export const ServerNode = memo(function ServerNode({
       <Handle
         type="target"
         position={Position.Left}
-        isConnectable={server.role !== "entry"}
+        isConnectable={!data.readOnly && server.role !== "entry"}
         className={server.role === "entry" ? "hidden-handle" : ""}
       />
       <div className="node-header">
@@ -42,7 +42,7 @@ export const ServerNode = memo(function ServerNode({
         <button
           className="nodrag icon-button"
           onClick={data.edit}
-          aria-label={t("editServer")}
+          aria-label={t(data.readOnly ? "removal.title" : "editServer")}
         >
           <MoreHorizontal size={18} />
         </button>
@@ -59,7 +59,7 @@ export const ServerNode = memo(function ServerNode({
       <Handle
         type="source"
         position={Position.Right}
-        isConnectable={server.role !== "exit"}
+        isConnectable={!data.readOnly && server.role !== "exit"}
         className={server.role === "exit" ? "hidden-handle" : ""}
       />
     </div>
