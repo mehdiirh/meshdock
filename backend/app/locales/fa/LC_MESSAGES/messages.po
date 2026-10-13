@@ -1,0 +1,127 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: fa\n"
+
+msgid "applying"
+msgstr "در حال فعال‌سازی نسخه جدید."
+
+msgid "body_too_large"
+msgstr "درخواست بیش از حد بزرگ است."
+
+msgid "capacity"
+msgstr "ظرفیت اتصال‌ها تکمیل شده است."
+
+msgid "checking"
+msgstr "در حال بررسی سلامت سرویس‌ها."
+
+msgid "credential_in_use"
+msgstr "این اطلاعات ورود در یک سرور یا نسخه مستقر استفاده می‌شود."
+
+msgid "csrf"
+msgstr "صفحه را تازه‌سازی کرده و دوباره تلاش کنید."
+
+msgid "deployment_queued"
+msgstr "استقرار در صف قرار گرفت."
+
+msgid "duplicate_host"
+msgstr "هر میزبان فقط یک بار می‌تواند در فهرست باشد."
+
+msgid "forbidden"
+msgstr "اجازه انجام این کار را ندارید."
+
+msgid "health_failed"
+msgstr "بررسی سلامت تونل یا مقصد ناموفق بود."
+
+msgid "host_key_changed"
+msgstr "اثر انگشت کلید میزبان SSH با مقدار تأییدشده مطابقت ندارد."
+
+msgid "install_failed"
+msgstr "نصب وابستگی‌ها ناموفق بود."
+
+msgid "invalid_key"
+msgstr "کلید خصوصی یا عبارت عبور نامعتبر است."
+
+msgid "invalid_login"
+msgstr "نام کاربری یا گذرواژه نادرست است."
+
+msgid "invalid_state"
+msgstr "این عملیات در وضعیت فعلی ممکن نیست."
+
+msgid "invalid_topology"
+msgstr "توپولوژی معتبر نیست."
+
+msgid "not_found"
+msgstr "مورد موردنظر پیدا نشد."
+
+msgid "ownership_conflict"
+msgstr "یک منبع خارج از مدیریت با این استقرار تداخل دارد."
+
+msgid "pool_policy"
+msgstr "اتصال‌های دارای پورت مشترک باید سیاست توزیع یکسان داشته باشند."
+
+msgid "port_conflict"
+msgstr "در هر اتصال پورت‌های عمومی باید یکتا باشند."
+
+msgid "preflight_failed"
+msgstr "بررسی اولیه سرور ناموفق بود."
+
+msgid "preparing"
+msgstr "در حال آماده‌سازی سرورها."
+
+msgid "rate_limit"
+msgstr "تلاش‌های زیادی انجام شده؛ بعداً دوباره تلاش کنید."
+
+msgid "recovered"
+msgstr "پیکربندی قبلی بازیابی شد. اکنون می‌توانید استقرار جدیدی درخواست کنید."
+
+msgid "recovery_required"
+msgstr "یک سرور در دسترس نیست؛ بازیابی لازم است."
+
+msgid "remote"
+msgstr "خروجی سرور راه دور."
+
+msgid "remote_failed"
+msgstr "یک عملیات روی سرور ناموفق بود. مرحله استقرار را بررسی کنید."
+
+msgid "reserved_port"
+msgstr "این پورت برای مدیریت یا ارتباط داخلی رزرو شده است (۲۰۰۰۰ تا ۶۰۹۹۹)."
+
+msgid "retrying"
+msgstr "تلاش دوباره زمان‌بندی شد."
+
+msgid "revision_conflict"
+msgstr "توپولوژی تغییر کرده است؛ پیش از ذخیره صفحه را تازه‌سازی کنید."
+
+msgid "rolled_back"
+msgstr "نسخه قبلی بازیابی شد."
+
+msgid "rolling_back"
+msgstr "در حال بازیابی نسخه قبلی."
+
+msgid "ssh_auth"
+msgstr "احراز هویت SSH کاربر روت ناموفق بود."
+
+msgid "ssh_unreachable"
+msgstr "دسترسی به SSH مدیریتی ممکن نیست."
+
+msgid "succeeded"
+msgstr "استقرار با موفقیت انجام شد."
+
+msgid "superseded"
+msgstr "با نسخه جدیدتر توپولوژی جایگزین شد."
+
+msgid "topology_cycle"
+msgstr "اتصال‌ها نباید یک چرخه تشکیل دهند."
+
+msgid "unauthorized"
+msgstr "برای ادامه وارد شوید."
+
+msgid "validation_error"
+msgstr "مقادیر واردشده را بررسی کنید."
+
+msgid "worker_claimed"
+msgstr "اجرای استقرار آغاز شد."
+
+msgid "worker_error"
+msgstr "استقرار ناموفق بود؛ جزئیات بازیابی ثبت شده است."

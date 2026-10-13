@@ -1,0 +1,127 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "applying"
+msgstr "Activating a new generation."
+
+msgid "body_too_large"
+msgstr "The request is too large."
+
+msgid "capacity"
+msgstr "The connection slot limit has been reached."
+
+msgid "checking"
+msgstr "Checking service health."
+
+msgid "credential_in_use"
+msgstr "This credential is used by a server or deployed generation."
+
+msgid "csrf"
+msgstr "Refresh the page and try again."
+
+msgid "deployment_queued"
+msgstr "Deployment queued."
+
+msgid "duplicate_host"
+msgstr "A host may only appear once in the inventory."
+
+msgid "forbidden"
+msgstr "This action is not permitted."
+
+msgid "health_failed"
+msgstr "The tunnel or destination health check failed."
+
+msgid "host_key_changed"
+msgstr "SSH host key did not match the trusted fingerprint."
+
+msgid "install_failed"
+msgstr "Dependency installation failed."
+
+msgid "invalid_key"
+msgstr "The private key or passphrase is invalid."
+
+msgid "invalid_login"
+msgstr "Invalid username or password."
+
+msgid "invalid_state"
+msgstr "This action is unavailable in the current state."
+
+msgid "invalid_topology"
+msgstr "The topology is invalid."
+
+msgid "not_found"
+msgstr "Resource not found."
+
+msgid "ownership_conflict"
+msgstr "An unmanaged resource conflicts with this deployment."
+
+msgid "pool_policy"
+msgstr "Connections sharing a public port must use the same balancing policy."
+
+msgid "port_conflict"
+msgstr "Public ports must be unique within a connection."
+
+msgid "preflight_failed"
+msgstr "Server preflight checks failed."
+
+msgid "preparing"
+msgstr "Preparing servers."
+
+msgid "rate_limit"
+msgstr "Too many attempts. Try again later."
+
+msgid "recovered"
+msgstr "Previous configuration restored. A new deployment may now be requested."
+
+msgid "recovery_required"
+msgstr "A server is unreachable; recovery is required."
+
+msgid "remote"
+msgstr "Remote server output."
+
+msgid "remote_failed"
+msgstr "A remote operation failed. See the deployment phase."
+
+msgid "reserved_port"
+msgstr "This port is reserved for management or tunnel internals (20000–60999)."
+
+msgid "retrying"
+msgstr "Retry scheduled."
+
+msgid "revision_conflict"
+msgstr "The topology changed. Refresh before saving."
+
+msgid "rolled_back"
+msgstr "Previous generation restored."
+
+msgid "rolling_back"
+msgstr "Restoring the previous generation."
+
+msgid "ssh_auth"
+msgstr "Root SSH authentication failed."
+
+msgid "ssh_unreachable"
+msgstr "The management SSH endpoint could not be reached."
+
+msgid "succeeded"
+msgstr "Deployment is healthy."
+
+msgid "superseded"
+msgstr "Replaced by a newer topology revision."
+
+msgid "topology_cycle"
+msgstr "Connections must not form a cycle."
+
+msgid "unauthorized"
+msgstr "Sign in to continue."
+
+msgid "validation_error"
+msgstr "Check the highlighted values."
+
+msgid "worker_claimed"
+msgstr "Worker started deployment."
+
+msgid "worker_error"
+msgstr "Deployment failed; recovery details are recorded below."
