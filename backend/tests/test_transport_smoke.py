@@ -65,14 +65,36 @@ class Echo(socketserver.BaseRequestHandler):
     not BINARIES, reason="Set MESHDOCK_TEST_BIN_DIR for opt-in real transport smoke tests"
 )
 @pytest.mark.parametrize(
-    "method,binaries",
+    "method,binaries,settings",
     [
-        ("frp_wss", ("frps", "frpc")),
-        ("hysteria2", ("hysteria", "hysteria")),
-        ("backhaul", ("backhaul", "backhaul")),
+        (
+            "rathole",
+            ("rathole", "rathole"),
+            {"nodelay": False, "heartbeat_interval": 15, "heartbeat_timeout": 60},
+        ),
+        ("frp_wss", ("frps", "frpc"), {}),
+        ("frp_wss", ("frps", "frpc"), {"tcp_mux": False, "pool_count": 12}),
+        ("hysteria2", ("hysteria", "hysteria"), {}),
+        (
+            "hysteria2",
+            ("hysteria", "hysteria"),
+            {"obfuscation": False, "stream_receive_window": 4194304},
+        ),
+        ("backhaul", ("backhaul", "backhaul"), {}),
+        (
+            "backhaul",
+            ("backhaul", "backhaul"),
+            {"transport": "tcpmux", "mux_version": 2, "mux_recievebuffer": 8388608},
+        ),
+        ("backhaul", ("backhaul", "backhaul"), {"transport": "ws"}),
+        (
+            "backhaul",
+            ("backhaul", "backhaul"),
+            {"transport": "wsmux", "mux_recievebuffer": 8388608},
+        ),
     ],
 )
-def test_round_trip_over_actual_transport(tmp_path, method, binaries):
+def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
     if any(not (Path(BINARIES) / name).exists() for name in binaries):
         pytest.skip("Required test binary absent")
     for _ in range(30):
@@ -95,6 +117,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
     link = {
         "id": "a" * 32,
         "slot": 987,
+        "settings": settings,
         "ports": expand(
             [
                 {
@@ -135,7 +158,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries):
             command = [str(Path(BINARIES) / binary)]
             if method == "hysteria2":
                 command += ["client" if role == "entry" else "server"]
-            command += ["-c", str(config)]
+            command += [str(config)] if method == "rathole" else ["-c", str(config)]
             stream = (folder / "output.log").open("wb")
             streams.append(stream)
             processes.append(subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT))

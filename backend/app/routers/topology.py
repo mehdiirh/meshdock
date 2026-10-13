@@ -40,7 +40,12 @@ def methods(actor=Depends(require("read"))):
     from ..methods import REGISTRY
 
     return [
-        {**m.metadata, "control_protocol": m.control_protocol, "mapping": m.mapping_capabilities}
+        {
+            **m.metadata,
+            "control_protocol": m.control_protocol,
+            "mapping": m.mapping_capabilities,
+            "settings_schema": m.options_model.schema(),
+        }
         for m in REGISTRY.values()
     ]
 

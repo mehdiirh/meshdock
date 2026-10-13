@@ -53,6 +53,7 @@ def desired(db, private=False):
     for row in db.execute("SELECT * FROM links ORDER BY created,id"):
         link = dict(row)
         link["ports"] = json.loads(link["ports"])
+        link["settings"] = json.loads(link["settings"])
         link["enabled"] = bool(link["enabled"])
         link.pop("created")
         if not private:
@@ -90,6 +91,7 @@ def validate(db, body):
         if not a or not b or a.id == b.id or a.role == "exit" or b.role == "entry":
             raise AppError("invalid_topology")
         adapter = REGISTRY[link.method]
+        adapter.options(link.model_dump())
         adapter.validate_mappings(link.model_dump())
         mappings = [p.model_dump() for p in link.ports]
         for index, mapping in enumerate(mappings):
@@ -220,7 +222,7 @@ def save(db, body, actor):
             used.add(slot)
             encrypted = seal(material())
         db.execute(
-            "INSERT INTO links(id,entry_id,exit_id,method,enabled,ports,policy,weight,slot,encrypted,created,control_port) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO links(id,entry_id,exit_id,method,enabled,ports,policy,weight,slot,encrypted,created,control_port,settings) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 link.id,
                 link.entry_id,
@@ -234,6 +236,7 @@ def save(db, body, actor):
                 encrypted,
                 time.time(),
                 link.control_port,
+                json.dumps(link.settings),
             ),
         )
     # Compile before committing: switching adapters must validate capacity and bindings.

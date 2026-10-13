@@ -9,6 +9,7 @@ import signal
 import socket
 import socketserver
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -26,7 +27,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def plans(monkeypatch, method, public="1023-65535", target="1023-65535", exclusions=None):
+def plans(
+    monkeypatch, method, public="1023-65535", target="1023-65535", exclusions=None, settings=None
+):
     secrets = material()
     monkeypatch.setattr(planner, "unseal", lambda _: secrets)
     return planner.build(
@@ -43,6 +46,7 @@ def plans(monkeypatch, method, public="1023-65535", target="1023-65535", exclusi
                     "exit_id": "exit",
                     "slot": 1,
                     "method": method,
+                    "settings": settings or {},
                     "enabled": True,
                     "encrypted": "test fixture",
                     "control_port": 2222,
@@ -94,7 +98,13 @@ class Echo(socketserver.BaseRequestHandler):
 
 
 def test_reverse_ssh_4097_listeners_and_both_session_boundaries(tmp_path, monkeypatch):
-    compiled = plans(monkeypatch, "reverse_ssh", "10000-14096", "19000-23096")
+    compiled = plans(
+        monkeypatch,
+        "reverse_ssh",
+        "10000-14096",
+        "19000-23096",
+        settings={"compression": True, "server_alive_interval": 30},
+    )
     folders = write_files(tmp_path, compiled)
     # Container test accommodation only: no production account/config is changed.
     # Root's package-image password is locked and fixture files live under /tmp.
@@ -222,7 +232,7 @@ with socket.create_connection(("127.0.0.2", 1234), timeout=1):
     pass
 """
         result = subprocess.run(
-            prefix + ["/usr/bin/python3", "-c", script], capture_output=True, timeout=10
+            prefix + [sys.executable, "-c", script], capture_output=True, timeout=10
         )
         assert result.returncode == 0, result.stderr.decode()
     finally:

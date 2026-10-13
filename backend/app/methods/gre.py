@@ -4,9 +4,17 @@ from ..gre_forwarding import configure_ranges
 from ..ports import bounds, segments
 from ..security import AppError
 from .base import Adapter, service
+from .options import Options, option
+
+
+class GREOptions(Options):
+    mtu: int = option(1400, ge=576, le=1472, unit="bytes")
+    ttl: int = option(64, ge=0, le=255)
+    tos: int = option(0, ge=0, le=255)
 
 
 class GRE(Adapter):
+    options_model = GREOptions
     control_protocol = None
     native_ranges = True
     internal_on_exit = True
@@ -49,6 +57,7 @@ class GRE(Adapter):
             exit["sockets"].append({"address": ip_b, "port": port, "protocol": "tcp"})
 
     def configure(self, context, entry, exit):
+        options = self.options(context.link)
         first = int(IPv4Address("10.253.0.0")) + context.link["slot"] * 4
         ip_a, ip_b = str(IPv4Address(first + 1)), str(IPv4Address(first + 2))
         # Linux interface names must stay within 15 bytes, including the largest slot.
@@ -62,9 +71,9 @@ class GRE(Adapter):
 set -eu
 case "$1" in
 up)
- ip tunnel add {iface} mode gre local {local['address']} remote {peer['address']} key {context.link['slot']} ttl 64
+ ip tunnel add {iface} mode gre local {local['address']} remote {peer['address']} key {context.link['slot']} ttl {options.ttl} tos {options.tos}
  ip address add {ip}/30 dev {iface}
- ip link set {iface} mtu 1400 up
+ ip link set {iface} mtu {options.mtu} up
  ;;
 down) ip tunnel del {iface} 2>/dev/null || true ;;
 esac

@@ -1,7 +1,17 @@
 from .base import Adapter, service
+from .options import Options, option
+
+
+class ReverseSSHOptions(Options):
+    server_alive_interval: int = option(15, ge=1, le=300, unit="seconds", scope="client")
+    server_alive_count_max: int = option(3, ge=1, le=20, scope="client")
+    connect_timeout: int = option(10, ge=1, le=300, unit="seconds", scope="client")
+    compression: bool = option(False, scope="client")
+    tcp_keepalive: bool = option(True, scope="client")
 
 
 class ReverseSSH(Adapter):
+    options_model = ReverseSSHOptions
     # OpenSSH allocates a channel per remote listener and per active connection.
     # Its 16,384-channel ceiling is per connection, not a limit on this link.
     # Split listeners across sessions, leaving most channels for live traffic.
@@ -17,6 +27,7 @@ class ReverseSSH(Adapter):
     }
 
     def configure(self, context, entry, exit):
+        options = self.options(context.link)
         name = context.filename
         address = context.bind_address
         entry["files"][name + "-host"] = context.secrets["host_private"]
@@ -68,9 +79,11 @@ LogLevel ERROR
   IdentityAgent none
   BatchMode yes
   ExitOnForwardFailure yes
-  ServerAliveInterval 15
-  ServerAliveCountMax 3
-  ConnectTimeout 10
+  ServerAliveInterval {options.server_alive_interval}
+  ServerAliveCountMax {options.server_alive_count_max}
+  ConnectTimeout {options.connect_timeout}
+  Compression {"yes" if options.compression else "no"}
+  TCPKeepAlive {"yes" if options.tcp_keepalive else "no"}
 """
         ports = context.link["ports"]
         for start in range(0, len(ports), self.forwards_per_session):

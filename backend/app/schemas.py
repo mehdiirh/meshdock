@@ -2,7 +2,7 @@
 
 import re
 from ipaddress import IPv4Address
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -117,6 +117,7 @@ class Link(Model):
     ports: list[Port] = Field(min_length=1, max_length=16)
     policy: Literal["roundrobin", "leastconn", "failover"] = "roundrobin"
     weight: int = Field(default=1, ge=1, le=256)
+    settings: dict[str, Any] = Field(default_factory=dict, max_length=64)
 
 
 class Topology(Revision):

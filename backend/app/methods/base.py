@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
 from ..ports import count
 from ..security import AppError
+from .options import Options
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,24 @@ WantedBy=multi-user.target
 
 class Adapter:
     metadata: dict
+    options_model = Options
+
+    def options(self, link):
+        try:
+            return self.options_model.model_validate(link.get("settings", {}))
+        except ValidationError as error:
+            # Never echo input values, arbitrary unknown keys, or exception text.
+            fields = sorted(
+                {
+                    str(item["loc"][0])
+                    for item in error.errors()
+                    if item["loc"] and item["loc"][0] in self.options_model.model_fields
+                }
+            )
+            raise AppError(
+                "invalid_method_settings", 422, {"method": self.metadata["id"], "fields": fields}
+            ) from None
+
     control_protocol: str | None = "tcp"
 
     internal_on_exit = False

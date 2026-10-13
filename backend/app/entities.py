@@ -71,6 +71,7 @@ class Link(Base):
     method: Mapped[str] = mapped_column(String(32))
     enabled: Mapped[int] = mapped_column(Integer)
     control_port: Mapped[int | None] = mapped_column(Integer)
+    settings: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     ports: Mapped[str] = mapped_column(Text)
     policy: Mapped[str] = mapped_column(String(16))
     weight: Mapped[int] = mapped_column(Integer)

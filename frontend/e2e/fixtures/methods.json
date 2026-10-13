@@ -1,0 +1,557 @@
+[
+  {
+    "id": "frp_wss",
+    "name": "FRP \u00b7 WSS",
+    "encrypted": true,
+    "direction": "exit-to-entry",
+    "protocols": ["tcp"],
+    "requirements": ["outbound-tcp", "pinned-private-tls"],
+    "priority": 1,
+    "score": 3.65,
+    "caveat": "private_tls",
+    "control_protocol": "tcp",
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": false,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "system_resources",
+      "forwards_per_session": null,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "tcp_mux": {
+          "default": true,
+          "scope": "both",
+          "title": "Tcp Mux",
+          "type": "boolean"
+        },
+        "tcp_mux_keepalive": {
+          "default": 30,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Tcp Mux Keepalive",
+          "type": "integer",
+          "unit": "seconds",
+          "when": {
+            "tcp_mux": [true]
+          }
+        },
+        "pool_count": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "scope": "client",
+          "title": "Pool Count",
+          "type": "integer"
+        },
+        "dial_timeout": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Dial Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "heartbeat_interval": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Heartbeat Interval",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "heartbeat_timeout": {
+          "default": 90,
+          "maximum": 3600,
+          "minimum": 2,
+          "scope": "both",
+          "title": "Heartbeat Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        }
+      },
+      "title": "FrpOptions",
+      "type": "object",
+      "rules": [
+        {
+          "left": "heartbeat_interval",
+          "operator": "lt",
+          "right": "heartbeat_timeout"
+        }
+      ],
+      "version": 1
+    }
+  },
+  {
+    "id": "hysteria2",
+    "name": "Hysteria 2",
+    "encrypted": true,
+    "direction": "entry-to-exit",
+    "protocols": ["tcp"],
+    "requirements": ["outbound-udp", "pinned-private-tls"],
+    "priority": 2,
+    "score": 3.55,
+    "caveat": "udp_required",
+    "control_protocol": "udp",
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": false,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "system_resources",
+      "forwards_per_session": null,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "obfuscation": {
+          "default": true,
+          "scope": "both",
+          "title": "Obfuscation",
+          "type": "boolean"
+        },
+        "stream_receive_window": {
+          "default": 8388608,
+          "maximum": 268435456,
+          "minimum": 65536,
+          "scope": "both",
+          "title": "Stream Receive Window",
+          "type": "integer",
+          "unit": "bytes"
+        },
+        "connection_receive_window": {
+          "default": 20971520,
+          "maximum": 1073741824,
+          "minimum": 65536,
+          "scope": "both",
+          "title": "Connection Receive Window",
+          "type": "integer",
+          "unit": "bytes"
+        },
+        "max_idle_timeout": {
+          "default": 30,
+          "maximum": 120,
+          "minimum": 4,
+          "scope": "both",
+          "title": "Max Idle Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "keepalive_period": {
+          "default": 10,
+          "maximum": 60,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Keepalive Period",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "disable_path_mtu_discovery": {
+          "default": false,
+          "scope": "both",
+          "title": "Disable Path Mtu Discovery",
+          "type": "boolean"
+        }
+      },
+      "title": "HysteriaOptions",
+      "type": "object",
+      "rules": [
+        {
+          "left": "stream_receive_window",
+          "operator": "lte",
+          "right": "connection_receive_window"
+        },
+        {
+          "left": "keepalive_period",
+          "operator": "lt",
+          "right": "max_idle_timeout"
+        }
+      ],
+      "version": 1
+    }
+  },
+  {
+    "id": "gre",
+    "name": "GRE",
+    "encrypted": false,
+    "direction": "entry-to-exit",
+    "protocols": ["tcp"],
+    "requirements": ["protocol-47", "public-ipv4"],
+    "control_protocol": null,
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": true,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "kernel",
+      "forwards_per_session": null,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "mtu": {
+          "default": 1400,
+          "maximum": 1472,
+          "minimum": 576,
+          "scope": "both",
+          "title": "Mtu",
+          "type": "integer",
+          "unit": "bytes"
+        },
+        "ttl": {
+          "default": 64,
+          "maximum": 255,
+          "minimum": 0,
+          "scope": "both",
+          "title": "Ttl",
+          "type": "integer"
+        },
+        "tos": {
+          "default": 0,
+          "maximum": 255,
+          "minimum": 0,
+          "scope": "both",
+          "title": "Tos",
+          "type": "integer"
+        }
+      },
+      "title": "GREOptions",
+      "type": "object",
+      "rules": [],
+      "version": 1
+    }
+  },
+  {
+    "id": "backhaul",
+    "name": "Backhaul",
+    "encrypted": false,
+    "direction": "exit-to-entry",
+    "protocols": ["tcp"],
+    "requirements": ["outbound-tcp"],
+    "control_protocol": "tcp",
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": false,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "system_resources",
+      "forwards_per_session": null,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "transport": {
+          "default": "tcp",
+          "enum": ["tcp", "tcpmux", "ws", "wsmux"],
+          "scope": "both",
+          "title": "Transport",
+          "type": "string"
+        },
+        "nodelay": {
+          "default": true,
+          "scope": "both",
+          "title": "Nodelay",
+          "type": "boolean"
+        },
+        "keepalive_period": {
+          "default": 30,
+          "maximum": 3600,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Keepalive Period",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "heartbeat": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "server",
+          "title": "Heartbeat",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "channel_size": {
+          "default": 2048,
+          "maximum": 65536,
+          "minimum": 1,
+          "scope": "server",
+          "title": "Channel Size",
+          "type": "integer"
+        },
+        "connection_pool": {
+          "default": 8,
+          "maximum": 1024,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Connection Pool",
+          "type": "integer"
+        },
+        "aggressive_pool": {
+          "default": false,
+          "scope": "client",
+          "title": "Aggressive Pool",
+          "type": "boolean"
+        },
+        "dial_timeout": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Dial Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "retry_interval": {
+          "default": 3,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Retry Interval",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "mux_con": {
+          "default": 8,
+          "maximum": 256,
+          "minimum": 1,
+          "scope": "server",
+          "title": "Mux Con",
+          "type": "integer",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        },
+        "mux_version": {
+          "default": 1,
+          "enum": [1, 2],
+          "scope": "both",
+          "title": "Mux Version",
+          "type": "integer",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        },
+        "mux_framesize": {
+          "default": 32768,
+          "maximum": 65535,
+          "minimum": 512,
+          "scope": "both",
+          "title": "Mux Framesize",
+          "type": "integer",
+          "unit": "bytes",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        },
+        "mux_recievebuffer": {
+          "default": 4194304,
+          "maximum": 268435456,
+          "minimum": 65536,
+          "scope": "both",
+          "title": "Mux Recievebuffer",
+          "type": "integer",
+          "unit": "bytes",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        },
+        "mux_streambuffer": {
+          "default": 65536,
+          "maximum": 268435456,
+          "minimum": 65536,
+          "scope": "both",
+          "title": "Mux Streambuffer",
+          "type": "integer",
+          "unit": "bytes",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        }
+      },
+      "title": "BackhaulOptions",
+      "type": "object",
+      "rules": [
+        {
+          "left": "mux_streambuffer",
+          "operator": "lte",
+          "right": "mux_recievebuffer",
+          "when": {
+            "transport": ["tcpmux", "wsmux"]
+          }
+        }
+      ],
+      "version": 1
+    }
+  },
+  {
+    "id": "rathole",
+    "name": "Rathole",
+    "encrypted": true,
+    "direction": "exit-to-entry",
+    "protocols": ["tcp"],
+    "requirements": ["outbound-tcp"],
+    "control_protocol": "tcp",
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": false,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "system_resources",
+      "forwards_per_session": null,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "nodelay": {
+          "default": true,
+          "scope": "both",
+          "title": "Nodelay",
+          "type": "boolean"
+        },
+        "keepalive_secs": {
+          "default": 20,
+          "maximum": 3600,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Keepalive Secs",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "keepalive_interval": {
+          "default": 8,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "both",
+          "title": "Keepalive Interval",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "heartbeat_interval": {
+          "default": 30,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "server",
+          "title": "Heartbeat Interval",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "heartbeat_timeout": {
+          "default": 40,
+          "maximum": 3600,
+          "minimum": 2,
+          "scope": "client",
+          "title": "Heartbeat Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "retry_interval": {
+          "default": 1,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Retry Interval",
+          "type": "integer",
+          "unit": "seconds"
+        }
+      },
+      "title": "RatholeOptions",
+      "type": "object",
+      "rules": [
+        {
+          "left": "heartbeat_interval",
+          "operator": "lt",
+          "right": "heartbeat_timeout"
+        }
+      ],
+      "version": 1
+    }
+  },
+  {
+    "id": "reverse_ssh",
+    "name": "Reverse SSH",
+    "encrypted": true,
+    "direction": "exit-to-entry",
+    "protocols": ["tcp"],
+    "requirements": ["outbound-tcp"],
+    "control_protocol": "tcp",
+    "mapping": {
+      "ranges": true,
+      "exceptions": true,
+      "native_ranges": false,
+      "max_ports": 65535,
+      "max_listener_ports": 65535,
+      "capacity_basis": "system_resources",
+      "forwards_per_session": 4096,
+      "protocols": ["tcp"],
+      "platforms": ["debian", "ubuntu"]
+    },
+    "settings_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "server_alive_interval": {
+          "default": 15,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Server Alive Interval",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "server_alive_count_max": {
+          "default": 3,
+          "maximum": 20,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Server Alive Count Max",
+          "type": "integer"
+        },
+        "connect_timeout": {
+          "default": 10,
+          "maximum": 300,
+          "minimum": 1,
+          "scope": "client",
+          "title": "Connect Timeout",
+          "type": "integer",
+          "unit": "seconds"
+        },
+        "compression": {
+          "default": false,
+          "scope": "client",
+          "title": "Compression",
+          "type": "boolean"
+        },
+        "tcp_keepalive": {
+          "default": true,
+          "scope": "client",
+          "title": "Tcp Keepalive",
+          "type": "boolean"
+        }
+      },
+      "title": "ReverseSSHOptions",
+      "type": "object",
+      "rules": [],
+      "version": 1
+    }
+  }
+]

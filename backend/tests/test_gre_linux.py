@@ -103,11 +103,11 @@ with socket.create_connection(('192.0.2.1', {port}), timeout=2) as s:
     assert (result.returncode == 0) == succeeds, result.stderr
 
 
-def activate(net, mapping, generation):
+def activate(net, mapping, generation, settings=None):
     entry, exit = empty(), empty()
     context = Context(
         "aaaaaaaaaa",
-        {"slot": 1, "ports": [mapping]},
+        {"slot": 1, "ports": [mapping], "settings": settings or {}},
         {"address": "192.0.2.1"},
         {"address": "192.0.2.6"},
         {},
@@ -118,15 +118,33 @@ def activate(net, mapping, generation):
         directory.mkdir(parents=True)
         (directory / "manifest.json").write_text(json.dumps(plan))
         pointer = directory.parent.parent / "current"
-        if not pointer.exists():
-            script = directory / "gre.sh"
-            script.write_text(plan["files"]["link-1-gre.sh"])
-            inside(ns, "sh", str(script), "up")
-        else:
+        if pointer.exists():
             helper(net, ns, "a.network_down()")
+            inside(ns, "sh", str(pointer / "gre.sh"), "down")
             pointer.unlink()
+        script = directory / "gre.sh"
+        script.write_text(plan["files"]["link-1-gre.sh"])
+        inside(ns, "sh", str(script), "up")
         pointer.symlink_to(directory)
         helper(net, ns, "p=a.manifest(a.current()); a.firewall(p['firewall']); a.network_up()")
+
+
+def test_gre_settings_change_and_previous_settings_restore(network):
+    mapping = {"public": "18000-18001", "target": "18000-18001", "host": "127.0.0.1"}
+    echo(network, network.exit, 18000)
+    for generation, settings in (
+        ("e" * 32, {"mtu": 1200, "ttl": 32, "tos": 16}),
+        ("f" * 32, {"mtu": 1400, "ttl": 64}),
+        ("a" * 32, {"mtu": 1200, "ttl": 32, "tos": 16}),
+    ):
+        activate(network, mapping, generation, settings)
+        for ns in (network.entry, network.exit):
+            interface = json.loads(
+                inside(ns, "ip", "-j", "-d", "link", "show", "mdaaaaaa1").stdout
+            )[0]
+            assert interface["mtu"] == settings["mtu"]
+            assert interface["linkinfo"]["info_data"]["ttl"] == settings["ttl"]
+        request(network, 18000)
 
 
 def test_real_gre_range_packets_exclusions_switch_rollback_and_cleanup(network):

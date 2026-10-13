@@ -164,3 +164,5 @@ msgstr "The server file-descriptor limits cannot accommodate this deployment. Re
 
 msgid "outgoing_port_capacity"
 msgstr "The mapping occupies all automatic outgoing TCP ports on this server’s egress address. Add explicit exceptions within the reported range, use a separate ingress address, or choose kernel forwarding."
+msgid "invalid_method_settings"
+msgstr "Invalid method settings. Check supported options, limits, and dependencies."

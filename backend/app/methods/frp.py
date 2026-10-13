@@ -2,9 +2,21 @@ import json
 
 from ..tls import TLS_SERVER_NAME
 from .base import Adapter, service
+from .options import Options, option
+
+
+class FrpOptions(Options):
+    tcp_mux: bool = option(True)
+    tcp_mux_keepalive: int = option(30, ge=1, le=300, unit="seconds", when={"tcp_mux": [True]})
+    pool_count: int = option(0, ge=0, le=100, scope="client")
+    dial_timeout: int = option(10, ge=1, le=300, scope="client", unit="seconds")
+    heartbeat_interval: int = option(10, ge=1, le=300, scope="client", unit="seconds")
+    heartbeat_timeout: int = option(90, ge=2, le=3600, unit="seconds")
+    rules = [{"left": "heartbeat_interval", "operator": "lt", "right": "heartbeat_timeout"}]
 
 
 class FrpWSS(Adapter):
+    options_model = FrpOptions
     auxiliary_count = 1
 
     metadata = {
@@ -20,6 +32,10 @@ class FrpWSS(Adapter):
     }
 
     def configure(self, context, entry, exit):
+        options = self.options(context.link)
+        common = f"transport.tcpMux = {json.dumps(options.tcp_mux)}\ntransport.heartbeatTimeout = {options.heartbeat_timeout}\n"
+        if options.tcp_mux:
+            common += f"transport.tcpMuxKeepaliveInterval = {options.tcp_mux_keepalive}\n"
         name = context.filename
         token = json.dumps(context.secrets["token"])
         for plan in (entry, exit):
@@ -50,7 +66,9 @@ auth.method = "token"
 auth.token = {token}
 allowPorts = [{ports}]
 transport.tls.force = false
+transport.maxPoolCount = {max(5, options.pool_count)}
 """
+        entry["files"][name + ".toml"] += common
         client = f"""serverAddr = "{context.entry['address']}"
 serverPort = {context.control}
 loginFailExit = false
@@ -61,7 +79,11 @@ transport.tls.enable = true
 transport.tls.disableCustomTLSFirstByte = true
 transport.tls.trustedCaFile = "{context.root}/{name}-ca.crt"
 transport.tls.serverName = "{TLS_SERVER_NAME}"
+transport.poolCount = {options.pool_count}
+transport.dialServerTimeout = {options.dial_timeout}
+transport.heartbeatInterval = {options.heartbeat_interval}
 """
+        client += common
         for index, port in enumerate(context.link["ports"]):
             client += f"""\n[[proxies]]
 name = "port-{index}"

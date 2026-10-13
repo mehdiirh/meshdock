@@ -2,9 +2,24 @@ import json
 
 from ..tls import TLS_SERVER_NAME
 from .base import Adapter, service
+from .options import Options, option
+
+
+class HysteriaOptions(Options):
+    obfuscation: bool = option(True)
+    stream_receive_window: int = option(8388608, ge=65536, le=268435456, unit="bytes")
+    connection_receive_window: int = option(20971520, ge=65536, le=1073741824, unit="bytes")
+    max_idle_timeout: int = option(30, ge=4, le=120, unit="seconds")
+    keepalive_period: int = option(10, ge=1, le=60, unit="seconds", scope="client")
+    disable_path_mtu_discovery: bool = option(False)
+    rules = [
+        {"left": "stream_receive_window", "operator": "lte", "right": "connection_receive_window"},
+        {"left": "keepalive_period", "operator": "lt", "right": "max_idle_timeout"},
+    ]
 
 
 class Hysteria2(Adapter):
+    options_model = HysteriaOptions
     control_protocol = "udp"
 
     metadata = {
@@ -20,6 +35,7 @@ class Hysteria2(Adapter):
     }
 
     def configure(self, context, entry, exit):
+        options = self.options(context.link)
         name = context.filename
         for plan in (entry, exit):
             plan["files"][name + "-ca.crt"] = context.secrets["tls_cert"]
@@ -59,6 +75,18 @@ class Hysteria2(Adapter):
             )
         # JSON is accepted by Hysteria's configuration loader and avoids YAML quoting ambiguities.
         for plan, role, config in ((entry, "client", client), (exit, "server", server)):
+            if not options.obfuscation:
+                config.pop("obfs")
+            config["quic"] = {
+                "initStreamReceiveWindow": options.stream_receive_window,
+                "maxStreamReceiveWindow": options.stream_receive_window,
+                "initConnReceiveWindow": options.connection_receive_window,
+                "maxConnReceiveWindow": options.connection_receive_window,
+                "maxIdleTimeout": f"{options.max_idle_timeout}s",
+                "disablePathMTUDiscovery": options.disable_path_mtu_discovery,
+            }
+            if role == "client":
+                config["quic"]["keepAlivePeriod"] = f"{options.keepalive_period}s"
             plan["files"][name + ".json"] = json.dumps(config, indent=2)
             plan["units"][context.tag + ".service"] = service(
                 f"/var/lib/meshdock/{context.namespace}/bin/hysteria {role} -c {context.root}/{name}.json"
