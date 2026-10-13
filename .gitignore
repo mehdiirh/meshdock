@@ -21,3 +21,7 @@ work/
 .DS_Store
 
 *.mo
+
+.idea/
+*.tsbuildinfo
+.ruff_cache/
