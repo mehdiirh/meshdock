@@ -159,6 +159,9 @@ def validate(db, body):
 
 
 def enqueue(db, actor, kind="deploy"):
+    from .force_removals import require_idle
+
+    require_idle(db)
     snapshot = desired(db, True)
     applied = json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0])
     snapshot["affected_link_ids"] = affected_links(applied, snapshot)
@@ -177,6 +180,9 @@ def enqueue(db, actor, kind="deploy"):
 
 
 def save(db, body, actor):
+    from .force_removals import require_idle, retained_snapshots
+
+    require_idle(db)
     state = db.execute("SELECT * FROM state WHERE id=1").fetchone()
     if state["revision"] != body.revision:
         raise AppError("revision_conflict", 409)
@@ -193,6 +199,7 @@ def save(db, body, actor):
             "SELECT snapshot FROM jobs WHERE status IN ('running','queued','retrying','recovering','recovery_required')"
         )
     ]
+    snapshots.extend(retained_snapshots(db))
     snapshots.append(json.loads(state["applied"]))
     used = {link["slot"] for s in snapshots for link in s.get("links", [])} | {
         v["slot"] for v in old.values()

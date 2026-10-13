@@ -173,11 +173,14 @@ class Worker:
             credentials = access_credentials(database, server)
         return self.remote_factory(server, credentials, namespace)
 
-    def operate(self, server, namespace, action, payload, *, install=False):
+    def require_lease(self):
         with connect() as database:
             if self.lease_lost.is_set() or not self.owns_lease(database):
                 self.lease_lost.set()
                 raise AppError("stale_worker")
+
+    def operate(self, server, namespace, action, payload, *, install=False):
+        self.require_lease()
         remote = self.remote(server, namespace)
         if self.active_job_id and isinstance(remote, Remote):
             remote.on_progress = lambda code, detail: log(
@@ -244,6 +247,17 @@ class Worker:
 
     def process(self, job):
         self.active_job_id = job["id"]
+        if job["kind"] == "force_delete":
+            from .force_removals import process
+
+            try:
+                process(self, job)
+            except Exception as error:
+                if not self.lease_lost.is_set():
+                    code = error.code if isinstance(error, AppError) else "worker_error"
+                    log(job["id"], code, level="error")
+                    self.finish(job, "waiting_cleanup", code)
+            return
         snapshot = json.loads(job["snapshot"])
         namespace = snapshot["namespace"]
         receipt = json.loads(job["receipt"])

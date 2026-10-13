@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from .. import removals, topology
+from .. import force_removals, removals, topology
 from .. import schemas as models
 from ..db import connect
 from ..security import AppError, require
@@ -112,3 +112,21 @@ def retry_removal(id: str, body: models.Revision, actor=Depends(require("admin")
 def restore_removal(id: str, body: models.Revision, actor=Depends(require("admin"))):
     with connect(True) as db:
         return removals.resolve(db, id, body.revision, actor, restore=True)
+
+
+@router.post("/servers/{id}/force-delete", status_code=202)
+def force_delete_server(id: str, body: models.Revision, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        return force_removals.start(db, id, body.revision, actor)
+
+
+@router.post("/jobs/{id}/retry-cleanup", status_code=202)
+def retry_force_cleanup(id: str, body: models.Revision, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        return force_removals.resume(db, id, body.revision, actor)
+
+
+@router.post("/jobs/{id}/skip-cleanup", status_code=202)
+def skip_force_cleanup(id: str, body: models.Revision, actor=Depends(require("admin"))):
+    with connect(True) as db:
+        return force_removals.resume(db, id, body.revision, actor, skip=True)

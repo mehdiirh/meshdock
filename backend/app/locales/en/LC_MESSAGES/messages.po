@@ -287,3 +287,33 @@ msgstr "The SSH jump host key changed. Verify its fingerprint before reconnectin
 
 msgid "ssh_jump_forward_failed"
 msgstr "The jump host could not open the target SSH connection. Check TCP forwarding permission and target reachability from the jump host."
+
+msgid "force_delete_busy"
+msgstr "Finish or review the current force deletion before changing the topology."
+
+msgid "force_delete_recovery_conflict"
+msgstr "An unrelated deployment still needs recovery. Recover it before forcing this server deletion."
+
+msgid "force_delete_skip_denied"
+msgstr "Only endpoints confirmed unreachable during this cleanup can be skipped. Retry or resolve the reported cleanup error."
+
+msgid "force_delete_started"
+msgstr "Checking and cleaning every affected endpoint before forced deletion."
+
+msgid "force_delete_checking"
+msgstr "Checking authenticated SSH access to this endpoint."
+
+msgid "force_delete_cleaned"
+msgstr "Endpoint cleanup completed; unrelated connections were preserved."
+
+msgid "force_delete_skipped"
+msgstr "Cleanup was skipped for this unreachable endpoint. Remote resources may remain."
+
+msgid "force_delete_attention"
+msgstr "Reachable endpoints were processed. Review remaining endpoints, retry cleanup or explicitly skip unreachable cleanup."
+
+msgid "force_delete_orphans"
+msgstr "Server deletion completed with skipped cleanup. Resources may remain on the reported unreachable endpoints."
+
+msgid "force_delete_complete"
+msgstr "The server and its connections were removed after endpoint cleanup."

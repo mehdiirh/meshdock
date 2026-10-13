@@ -60,7 +60,9 @@ def view(db, desired):
 
 def resolve(db, link_id, revision, actor, *, restore):
     from . import topology
+    from .force_removals import require_idle
 
+    require_idle(db)
     state = db.execute("SELECT * FROM state WHERE id=1").fetchone()
     if state["revision"] != revision:
         raise AppError("revision_conflict", 409)

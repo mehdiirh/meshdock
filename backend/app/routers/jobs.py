@@ -5,6 +5,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
+from .. import force_removals
 from ..changes import affected_links
 from ..db import audit, connect
 from ..i18n import translate
@@ -21,13 +22,22 @@ def language(request):
 def jobs(request: Request, actor=Depends(require("read"))):
     with connect() as db:
         rows = db.execute(
-            "SELECT id,revision,kind,status,attempt,created,started,finished,error_code,cancel_requested,snapshot "
+            "SELECT id,revision,kind,status,attempt,created,started,finished,error_code,cancel_requested,snapshot,receipt "
             "FROM jobs ORDER BY revision DESC,created DESC,id DESC LIMIT 100"
         ).fetchall()
         applied = json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0])
         result = []
         for row in rows:
             job = dict(row)
+            if job["kind"] == force_removals.KIND:
+                job["force_delete"] = force_removals.report(row)
+                for host in job["force_delete"]["hosts"]:
+                    host["error_message"] = (
+                        translate(host["error_code"], language(request))
+                        if host["error_code"]
+                        else None
+                    )
+            job.pop("receipt")
             snapshot = json.loads(job.pop("snapshot"))
             job["link_ids"] = snapshot.get("affected_link_ids")
             if job["link_ids"] is None:
@@ -48,9 +58,13 @@ def jobs(request: Request, actor=Depends(require("read"))):
 @router.post("/jobs/{id}/cancel", status_code=202)
 def cancel(id: str, actor=Depends(require("admin"))):
     with connect(True) as db:
-        row = db.execute("SELECT status,cancel_requested FROM jobs WHERE id=?", (id,)).fetchone()
+        row = db.execute(
+            "SELECT kind,status,cancel_requested FROM jobs WHERE id=?", (id,)
+        ).fetchone()
         if not row:
             raise AppError("not_found", 404)
+        if row["kind"] == force_removals.KIND:
+            raise AppError("force_delete_busy", 409)
         if row["status"] == "cancelled" or row["cancel_requested"]:
             return {"job_id": id}
         if row["status"] not in ("queued", "retrying", "running"):
@@ -69,6 +83,7 @@ def cancel(id: str, actor=Depends(require("admin"))):
 @router.post("/jobs/{id}/recover", status_code=202)
 def recover(id: str, actor=Depends(require("admin"))):
     with connect(True) as db:
+        force_removals.require_idle(db)
         row = db.execute("SELECT * FROM jobs WHERE id=?", (id,)).fetchone()
         if not row:
             raise AppError("not_found", 404)
@@ -138,6 +153,7 @@ async def events(
                 "failed",
                 "superseded",
                 "recovery_required",
+                "waiting_cleanup",
             ):
                 yield "event: done\ndata: {}\n\n"
                 break

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from .. import schemas as models
 from .. import settings, ssh
 from ..db import audit, connect, uid
+from ..force_removals import retained_snapshots
 from ..security import AppError, require, seal
 from ..ssh_access import credential, credential_ids
 
@@ -48,6 +49,7 @@ def delete_credential(id: str, actor=Depends(require("admin"))):
                 "SELECT snapshot FROM jobs WHERE status IN ('running','queued','retrying','recovering','recovery_required')"
             )
         ]
+        refs.extend(retained_snapshots(db))
         refs.append(json.loads(db.execute("SELECT applied FROM state WHERE id=1").fetchone()[0]))
         active = [dict(row) for row in db.execute("SELECT * FROM servers WHERE deleted=0")]
         referenced = active + [
