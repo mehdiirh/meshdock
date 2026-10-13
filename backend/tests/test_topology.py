@@ -202,3 +202,20 @@ def test_cycle_is_rejected(admin):
         {**sample, "id": "b" * 32, "entry_id": second["id"], "exit_id": first["id"]},
     ]
     assert admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "topology_cycle"
+
+
+def test_reverse_ssh_default_port_uses_standard_known_host_name():
+    from app.methods import REGISTRY
+    from app.methods.base import Context
+    from app.planner import empty
+
+    context = Context(
+        "a" * 10,
+        {"slot": 1, "control_port": 22, "ports": []},
+        {"address": "192.0.2.1"},
+        {"address": "192.0.2.2"},
+        topology.material(),
+    )
+    entry, exit = empty(), empty()
+    REGISTRY["reverse_ssh"].configure(context, entry, exit)
+    assert exit["files"]["link-1-known"].startswith("192.0.2.1 ssh-ed25519 ")

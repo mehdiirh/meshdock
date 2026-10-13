@@ -45,11 +45,9 @@ LogLevel ERROR
             f"/usr/sbin/sshd -D -e -f {context.root}/{name}-sshd.conf"
         )
         exit["files"][name + "-key"] = context.secrets["client_private"]
-        exit["files"][name + "-known"] = (
-            f'[{context.entry["address"]}]:{context.control} '
-            + context.secrets["host_public"]
-            + "\n"
-        )
+        peer = context.entry["address"]
+        known_host = peer if context.control == 22 else f"[{peer}]:{context.control}"
+        exit["files"][name + "-known"] = known_host + " " + context.secrets["host_public"] + "\n"
         forwards = " ".join(
             f'-R 127.0.0.1:{context.internal(index)}:{port["host"]}:{port["target"]}'
             for index, port in enumerate(context.link["ports"])
