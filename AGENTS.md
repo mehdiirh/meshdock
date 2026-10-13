@@ -29,3 +29,5 @@
 - Compare desired and applied server plans before reconciling. Keep unchanged hosts and units running; compare transitive referenced files so certificate changes restart their consumers. Test incremental apply AND rollback on shared entries, especially GRE network state.
 - Cancellation must be durable and cooperative at remote-operation boundaries. Never terminate an SSH mutation to simulate cancellation. Retain rollback/recovery fencing, and test cancellation through commit and worker crash recovery.
 - Emit only allowlisted, sanitized operational progress over SSH. Persist progress before streaming to clients; identify the failing server and phase. The collapsed deployment footer follows the latest revision, and failure coloring applies to affected links only.
+
+- Keep applied-only connections and missing endpoints visible until deletion commits. Expose only allowlisted public snapshot fields. Restore must preserve slots and encrypted identities, validate current topology conflicts, and remain fenced during deployment/recovery. Test failed removal, partial apply, cancellation, retry, and restoration without touching live hosts.

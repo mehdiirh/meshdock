@@ -48,6 +48,22 @@ A recovery-required job blocks changes. Restore management access, confirm the h
 
 Management SSH must be reachable from the **controller**, even when intentionally blocked from other remote servers. GRE data-plane reachability and SSH control-plane reachability are separate requirements.
 
+## Failed connection removal
+
+A deletion changes the requested topology immediately, but the last applied snapshot retains the connection until a successful deployment commits. The canvas overlays those retained connections and any missing endpoint nodes. They remain visible after a reload, including after deleting a whole server or disabling a link. A failed rollback is shown as uncertain, rather than claiming that every endpoint is still deployed.
+
+Click the connection or the unfinished-removal banner:
+
+- **Retry removal** queues the current requested revision again. The connection stays visible while queued/running and disappears only after successful removal.
+- **Restore connection** puts the applied connection and missing endpoints back into the requested topology, preserving its slot and encrypted tunnel identity. If this exactly undoes the only pending change, the worker has no remote work. Other pending changes still reconcile; the confirmation explains this.
+- During an active deployment or unresolved recovery, both actions are blocked. Complete recovery in the deployment drawer first.
+
+Restoration validates mappings and topology conflicts. If an existing endpoint's SSH identity, address, role or credential changed, restore those settings first; restoring a connection does not silently overwrite endpoint edits. Restoring one connection after a server deletion restores only that connection and its required endpoints; other removals stay pending.
+
+`GET /api/v1/topology` includes `pending_removals` (public link plus status) and `removal_servers` (missing public endpoint records). These are display-only fields, excluded from ordinary topology PUT requests and private worker snapshots. No new database migration is needed: the projection reads the existing applied snapshot. Admin actions are `POST /api/v1/links/{id}/retry-removal` and `POST /api/v1/links/{id}/restore`, each with `{"revision": <current revision>}` and normal authentication/CSRF requirements. They enforce revision checks, recovery fencing and audit records; private tunnel material is never returned.
+
+An installation can clean up only the resources tracked by its own database and namespace. If a new controller reports a conflict with a tunnel created by an older controller, use the original controller to finish removal. Do not erase the old database or manually remove only the interface while managed services remain.
+
 ## Local verification limitations
 
 The bundled Compose configuration can be validated without a Docker daemon. Image builds and Linux systemd/firewall integration require a functioning daemon or staging VMs. Neither a simulated worker nor local loopback transport tests prove production kernel/firewall behavior or national-filtering reachability.
