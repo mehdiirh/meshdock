@@ -26,7 +26,7 @@ SQLite coordination queries deliberately use explicit short transactions and `BE
 6. Store new private material encrypted. Support older link-secret dictionaries when adding fields. Never return secrets in method metadata, plans, errors or exports.
 7. Add compiler tests, real-binary loopback tests and isolated Linux provisioning tests before declaring production validation. The shared worker provides retries and rollback; adapters must not bypass it.
 
-The React method picker discovers adapters from `/api/v1/methods`. A method with additional user-configurable settings will need an explicit versioned Pydantic settings schema, persistence migration and reusable form/inspector control; do not accept arbitrary shell fragments or raw systemd snippets.
+The React method picker discovers adapters from `/api/v1/methods`. Each adapter declares a strict `Options` model; its versioned JSON Schema drives the reusable advanced inspector. Per-link JSON overrides are stored in the migrated `links.settings` column and deployment snapshots. See [advanced settings and extension steps](METHOD-SETTINGS.md). Never accept arbitrary shell fragments or raw systemd snippets.
 
 ## Transactions and concurrency
 

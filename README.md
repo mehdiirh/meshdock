@@ -23,6 +23,7 @@ MeshDock brings your server inventory, tunnel configuration, SSH credentials, an
 
 - **Build your topology visually.** Drag server cards, connect their handles, reconnect lines, or select several servers to create connections in a batch.
 - **Switch tunnel methods.** Choose GRE, Backhaul, Rathole, reverse SSH, FRP WSS, or Hysteria 2. Mappings are validated when you change methods.
+- **Tune each connection.** Open **Advanced settings** for transport choices, mux buffers, timers, pools, MTU and other supported controls. Options are validated per method and deployed with health checks and rollback. See [supported settings and API examples](docs/METHOD-SETTINGS.md).
 - **Forward individual ports or ranges.** Use ranges such as `1023-65535` with explicit exceptions. MeshDock checks management ports, transport listeners, overlapping mappings, and live server conflicts.
 - **Reuse SSH credentials.** Store root passwords or private keys in an encrypted vault, then use them across servers. Verify and pin each server's SSH fingerprint.
 - **Follow deployments.** See persisted deployment events, retry failures, and recover the previous configuration when activation fails.

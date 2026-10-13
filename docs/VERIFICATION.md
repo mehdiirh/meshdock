@@ -1,5 +1,18 @@
 # Verification record — 2026-10-13
 
+## Advanced settings verification (latest)
+
+- All six adapters expose strict, versioned settings schemas, consumed by the generic English/Persian UI. Tests cover persisted overrides, unknown/unsafe keys, strict types, conditional controls, cross-field validation, method switching, and unchanged revisions/jobs on rejection.
+- 132 default backend tests passed. Optional transport/Linux tests are run separately below. Alembic tests cover upgrading existing rows, repeated startup, model/schema parity, and failure after the settings DDL reverting both the column and revision.
+- Six generation-level deployment tests use real temporary files and host journals with simulated host commands: apply defaults, deploy custom settings, inject a health failure, compare every restored configuration file with the prior generation, then retry successfully. Actual multi-host systemd rollback still needs staging VMs.
+- Eight real macOS loopback cases passed: FRP WSS with default and disabled mux/pool overrides; Hysteria with default and custom buffers/disabled obfuscation; Backhaul TCP, TCP mux, WebSocket, and WebSocket mux with custom buffers. FRP uses a local TLS relay in place of HAProxy in these macOS tests.
+- One additional Rathole 0.5.0 Noise loopback case passed with custom TCP/heartbeat settings. Its pinned Linux ARM64 artifact was SHA-256 verified during a temporary image build; the traffic test ran with `--network none`.
+- Nine tests passed in the stock uv-based Linux test image with `--privileged --network none`, no host mounts and disposable namespaces. They cover GRE packet forwarding, exclusions, MTU/TTL changes and restoration, full-range HAProxy configuration for socket methods, 4,097 SSH listeners carrying traffic with custom SSH tuning, and outgoing source-port exhaustion. The test uses the active Python interpreter rather than assuming `/usr/bin/python3`.
+- Fourteen frontend unit tests and five Playwright browser tests passed using installed Chrome, isolated API mocks and a separate test server. Checks cover saved advanced settings, invalid-value blocking, per-method drafts, defaults, conditional mux controls, Persian RTL, theme switching and existing range behavior. The new panel was visually reviewed in English and Persian.
+- Black, Ruff, Prettier and TypeScript/Vite builds pass. No real inventory server was contacted or changed. Numeric bounds and supported controls are documented in [METHOD-SETTINGS.md](METHOD-SETTINGS.md).
+
+The older verification entries below describe earlier stages. Their Python-download/Linux-image and unexecuted Playwright limitations were resolved for this verification run. Full remote package/systemd staging and ISP performance measurements remain outstanding.
+
 ## Completed locally
 
 - 69 backend tests passed in the uv-managed Python 3.12 environment, including three opt-in real-binary transport tests; eight Linux-only tests were run separately and passed. Coverage includes schema upgrades with existing data, rollback of failed DDL, authentication and scopes, secret handling, revision conflicts, all six adapter plans, custom-port collisions, worker takeover/fencing, failed activation, interrupted-job recovery, cleanup, localization and multi-page event streams.

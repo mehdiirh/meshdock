@@ -16,6 +16,8 @@ Proceeding without blocking questions, as requested.
 
 Questions for later: preferred public domain/TLS termination; multi-tenant workspaces and non-admin roles; UDP priorities; IPv6; desired retention and alert integrations; hardware scale targets and provider firewall integration.
 
+- Method tuning uses adapter-owned strict Pydantic models and a generic schema-driven UI. Per-link JSON overrides are migrated and included in immutable job snapshots; rollback uses previous generation files. Supported controls are deliberately allowlisted. Transport variants that require new TLS, binding or firewall behavior need adapter work; raw configuration passthrough is not supported. Numeric bounds are controller policy, not upstream capacity claims. See METHOD-SETTINGS.md.
+
 - Removed the former 512/64 application caps after checking upstream configurations. All adapters accept full TCP ranges subject to listener allocation, management/control conflicts, actual descriptor limits and outgoing port space. Reverse SSH splits forwards across sessions of 4,096, leaving channel headroom. This is not a throughput or universal hardware-capacity guarantee; see PORT-MAPPINGS.md for sources and tested boundaries.
 - Large GRE ranges use Linux kernel forwarding. Socket adapters retain HAProxy pools. Mixed single/range GRE connections use the kernel path for every row and cannot share those public ports with another connection.
 - Internal allocations belong to immutable deployment manifests, not a globally reserved public band. Existing compact JSON storage supports range intent without schema mutation; startup/migration preservation is tested.
