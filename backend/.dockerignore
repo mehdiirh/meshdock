@@ -1,0 +1,10 @@
+.venv
+.data
+.idea
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
+*.db
+*.key
+*.pem

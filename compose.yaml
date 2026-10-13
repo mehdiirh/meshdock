@@ -1,0 +1,75 @@
+name: tunnel-manager
+x-backend: &backend
+  build: ./backend
+  image: tunnel-manager-backend:local
+  restart: unless-stopped
+  volumes: [manager-data:/data]
+  environment: &environment
+    TM_DATA_DIR: /data
+    TM_PUBLIC_ORIGIN: ${TM_PUBLIC_ORIGIN:-http://localhost:8080}
+    TM_COOKIE_SECURE: ${TM_COOKIE_SECURE:-true}
+    TM_DEMO: ${TM_DEMO:-false}
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+  stop_grace_period: 2m
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+services:
+  api:
+    <<: *backend
+    environment:
+      <<: *environment
+      TM_ADMIN_USERNAME: ${TM_ADMIN_USERNAME:-admin}
+      TM_ADMIN_PASSWORD: ${TM_ADMIN_PASSWORD:?Run scripts/setup.py first}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  worker:
+    <<: *backend
+    command: [python, -m, app.worker]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import sqlite3,time; d=sqlite3.connect('/data/manager.sqlite3'); r=d.execute('SELECT until FROM leader WHERE id=1').fetchone(); assert r and r[0]>time.time()"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  web:
+    build: ./frontend
+    image: tunnel-manager-web:local
+    restart: unless-stopped
+    ports: ['127.0.0.1:${TM_PORT:-8080}:8080']
+    depends_on:
+      api: {condition: service_healthy}
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+  tls:
+    image: caddy:2-alpine
+    profiles: [tls]
+    restart: unless-stopped
+    environment:
+      TM_DOMAIN: ${TM_DOMAIN:-localhost}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+volumes:
+  manager-data:
+  caddy-data:
+  caddy-config:
