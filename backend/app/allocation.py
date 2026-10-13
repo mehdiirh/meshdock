@@ -84,6 +84,9 @@ def allocate(snapshot):
             for mapping in link["ports"]
         )
         link["ports"] = expand(link["ports"])
+        if adapter.forwards_per_session:
+            for index, mapping in enumerate(link["ports"]):
+                mapping["health_group"] = index // adapter.forwards_per_session
         server = link["exit_id"] if adapter.internal_on_exit else link["entry_id"]
         bind = adapter.internal_address(link)
         link["internal_address"] = bind

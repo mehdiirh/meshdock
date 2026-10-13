@@ -133,8 +133,10 @@ def test_full_gre_range_compact_and_method_switch_supported(admin):
         public = {s["port"] for s in plan["sockets"] if s["address"] == entry["address"]}
         assert 1023 in public and 65535 in public
         assert "listen public_8080\n" not in plan["files"]["haproxy.cfg"]
-        assert len(plan["checks"]) == 1
-        assert plan["files"]["haproxy.cfg"].count("check inter") <= 2
+        batch = REGISTRY[method].forwards_per_session
+        expected_checks = (64510 + batch - 1) // batch if batch else 1
+        assert len(plan["checks"]) == expected_checks
+        assert plan["files"]["haproxy.cfg"].count("check inter") <= expected_checks + 1
         assert len(plan["files"]["firewall.sh"].splitlines()) < 25
         assert plan["resources"]["nofile"] > 65536
     value["links"][0]["ports"][0]["exclude"] = []
@@ -425,3 +427,40 @@ def test_range_readiness_detects_missing_listener_without_probing_targets(tmp_pa
     output = output.split("\n", 1)[1]
     with pytest.raises(OperationError, match="health_failed"):
         agent.socket_readiness(plan)
+
+
+def test_outgoing_ports_use_live_kernel_range_and_egress_address(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    agent = Agent("a" * 10, root=tmp_path)
+    original = Path.read_text
+    values = {
+        "/proc/sys/net/ipv4/ip_local_port_range": "40000 40002",
+        "/proc/sys/net/ipv4/ip_local_reserved_ports": "40002",
+    }
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda p, *a, **k: values[str(p)] if str(p) in values else original(p, *a, **k),
+    )
+    monkeypatch.setattr(remote_agent.shutil, "which", lambda _: "/usr/bin/ip")
+    monkeypatch.setattr(
+        remote_agent,
+        "run",
+        lambda *a, **k: SimpleNamespace(stdout=b'[{"prefsrc":"192.0.2.10"}]', returncode=0),
+    )
+    plan = empty()
+    plan["sockets"] = [
+        {"address": "192.0.2.10", "protocol": "tcp", "port": p} for p in (40000, 40001)
+    ]
+    with pytest.raises(OperationError, match="outgoing_port_capacity") as error:
+        agent.outgoing_port_preflight(plan)
+    assert error.value.detail == {"start": 40000, "end": 40002, "address": "192.0.2.10"}
+    plan["sockets"].pop()  # Explicit exception leaves outgoing capacity.
+    agent.outgoing_port_preflight(plan)
+    plan["sockets"] = [
+        {"address": "192.0.2.11", "protocol": "tcp", "port": p} for p in (40000, 40001)
+    ]
+    agent.outgoing_port_preflight(plan)  # Separate ingress IP does not exhaust egress.
+    plan["sockets"] = []  # Kernel forwarding doesn't bind all public ports.
+    agent.outgoing_port_preflight(plan)

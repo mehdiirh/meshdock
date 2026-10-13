@@ -126,6 +126,7 @@ class Agent:
             ):
                 raise OperationError("ownership_conflict")
         self.resource_preflight(plan)
+        self.outgoing_port_preflight(plan)
         self.socket_preflight(plan)
         self.network_preflight(plan)
         if shutil.which("ip"):
@@ -249,6 +250,38 @@ class Agent:
             raise OperationError(
                 "descriptor_capacity",
                 {"required": resources["descriptor_budget"], "available": available},
+            )
+
+    def outgoing_port_preflight(self, plan):
+        if not plan.get("sockets") or not shutil.which("ip"):
+            return
+        first, last = map(int, Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split())
+        # Route lookup only: no packet is sent to this documentation address.
+        # A non-default/policy route can have another source; this guard detects
+        # the normal Internet route, not every possible routing policy.
+        result = run(["ip", "-json", "route", "get", "192.0.2.1"], check=False)
+        if result.returncode:
+            return
+        routes = json.loads(result.stdout)
+        if not routes or not routes[0].get("prefsrc"):
+            return
+        address = routes[0]["prefsrc"]
+        occupied = {
+            item["port"]
+            for item in plan["sockets"]
+            if item["protocol"] == "tcp" and item["address"] == address
+        }
+        if not occupied:
+            return
+        for value in (
+            Path("/proc/sys/net/ipv4/ip_local_reserved_ports").read_text().strip().split(",")
+        ):
+            if value:
+                parts = [int(p) for p in value.split("-")]
+                occupied.update(range(parts[0], parts[-1] + 1))
+        if all(port in occupied for port in range(first, last + 1)):
+            raise OperationError(
+                "outgoing_port_capacity", {"start": first, "end": last, "address": address}
             )
 
     def socket_readiness(self, plan):

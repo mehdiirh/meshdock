@@ -13,12 +13,10 @@ jobs:
       - run: uv run --project backend --no-sync black --config backend/pyproject.toml --check backend scripts
       - run: uv run --project backend --no-sync ruff check --config backend/pyproject.toml backend scripts
       - run: cd backend && uv run --no-sync pytest -q
-      - name: Verify GRE packets in disposable Linux namespaces
+      - name: Verify Linux range configurations and traffic in an isolated container
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq iproute2 iptables iputils-ping
-          cd backend
-          sudo env TM_TEST_LINUX_NETWORK=1 .venv/bin/python -m pytest -q tests/test_gre_linux.py
+          docker build -f backend/Dockerfile.network-test -t tunnel-manager-network-test backend
+          docker run --rm --privileged --network none tunnel-manager-network-test uv run --no-sync pytest -q tests/test_socket_linux.py tests/test_gre_linux.py
       - run: python scripts/setup.py --demo && docker compose config --quiet
   frontend:
     runs-on: ubuntu-latest

@@ -66,7 +66,7 @@ def build(snapshot):
             plan["public_address"] = public_address
         pool = defaultdict(list)
         for mapping, host, port, link in plan.pop("backends"):
-            pool[mapping["public"]].append((host, port, link))
+            pool[mapping["public"]].append((host, port, link, mapping.get("health_group", 0)))
         config = f"""global
   maxconn 65536
   stats socket /run/tm-{namespace}-stats.sock mode 600 level admin
@@ -84,18 +84,20 @@ defaults
         # tens of thousands of repeated health probes against the same tunnel.
         tracked = {}
         for backends in pool.values():
-            for host, port, link in backends:
+            for host, port, link, group in backends:
                 if link.get("range_mapping"):
-                    tracked.setdefault(link["slot"], (host, port))
+                    tracked.setdefault(f'{link["slot"]}_{group}', (host, port))
         for slot, (host, port) in tracked.items():
             config += f"backend transport_{slot}\n  server ready {host}:{port} check inter 3s fall 3 rise 2\n"
             plan["checks"].append({"host": host, "port": port})
         for public, backends in sorted(pool.items()):
             policy = backends[0][2]["policy"]
             config += f'listen public_{public}\n  bind {public_address}:{public}\n  balance {"roundrobin" if policy=="failover" else policy}\n'
-            for i, (host, port, link) in enumerate(sorted(backends, key=lambda x: x[2]["slot"])):
+            for i, (host, port, link, group) in enumerate(
+                sorted(backends, key=lambda x: x[2]["slot"])
+            ):
                 health = (
-                    f'track transport_{link["slot"]}/ready'
+                    f'track transport_{link["slot"]}_{group}/ready'
                     if link.get("range_mapping")
                     else "check inter 3s fall 3 rise 2"
                 )
@@ -160,12 +162,15 @@ defaults
             )
         # Allow the router's listeners plus two descriptors per active proxy
         # connection. This is per-process headroom, not a promise of throughput.
-        nofile = max(65536, len(plan["sockets"]) + 2 * 65536 + 4096)
+        forwards = plan.pop("forward_count")
+        nofile = max(65536, 2 * forwards + 4096)
+        if pool or relays:
+            nofile = max(nofile, len(plan["sockets"]) + 2 * 65536 + 4096)
         plan["resources"] = {
             "listeners": len(plan["sockets"]),
             "nofile": nofile if plan["units"] else 0,
             "descriptor_budget": (
-                len(plan["sockets"]) + 2 * plan.pop("forward_count") + 4096 if plan["units"] else 0
+                len(plan["sockets"]) + 2 * forwards + 4096 if plan["units"] else 0
             ),
         }
         for name, unit in plan["units"].items():

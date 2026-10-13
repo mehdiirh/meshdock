@@ -161,3 +161,6 @@ msgstr "GRE target ranges overlap for different destination hosts on the same co
 
 msgid "descriptor_capacity"
 msgstr "The server file-descriptor limits cannot accommodate this deployment. Review the required and available capacity."
+
+msgid "outgoing_port_capacity"
+msgstr "The mapping occupies all automatic outgoing TCP ports on this server’s egress address. Add explicit exceptions within the reported range, use a separate ingress address, or choose kernel forwarding."

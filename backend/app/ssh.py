@@ -148,6 +148,20 @@ class Remote:
                         "address": address,
                         "server_id": self.server["id"],
                     }
+            if result.get("code") == "outgoing_port_capacity":
+                from ipaddress import ip_address
+
+                if (
+                    type(details.get("start")) is int
+                    and type(details.get("end")) is int
+                    and 1 <= details["start"] <= details["end"] <= 65535
+                ):
+                    safe = {
+                        "start": details["start"],
+                        "end": details["end"],
+                        "address": str(ip_address(details["address"])),
+                        "server_id": self.server["id"],
+                    }
             if result.get("code") == "descriptor_capacity":
                 safe = {
                     key: value
