@@ -62,3 +62,15 @@ export function mappingStatus(
     return { count, native, error: (error as Error).message };
   }
 }
+
+export function compactPorts(ports: number[]): string {
+  const sorted = [...new Set(ports)].sort((a, b) => a - b);
+  const spans: string[] = [];
+  for (let index = 0; index < sorted.length; index++) {
+    const first = sorted[index];
+    let last = first;
+    while (sorted[index + 1] === last + 1) last = sorted[++index];
+    spans.push(first === last ? String(first) : `${first}-${last}`);
+  }
+  return spans.join(", ");
+}

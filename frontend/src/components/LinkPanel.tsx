@@ -269,6 +269,17 @@ export function LinkPanel({
               max: method?.mapping.max_listener_ports,
             })}
           </span>
+          {!status.native && <small>{t("socketCapacityHint")}</small>}
+          {method?.mapping.forwards_per_session && (
+            <small>
+              {t("sshSessionCount", {
+                count: Math.ceil(
+                  status.count / method.mapping.forwards_per_session,
+                ),
+                size: method.mapping.forwards_per_session,
+              })}
+            </small>
+          )}
           <small>{t("mappingPlatform")}</small>
         </div>
         {status.error && (
@@ -277,6 +288,9 @@ export function LinkPanel({
           </div>
         )}
         <p className="small muted">{t("actualPortConflicts")}</p>
+        {!status.native && status.count > 4096 && (
+          <p className="small muted">{t("outgoingPortHint")}</p>
+        )}
         {status.native ? (
           <p className="small muted">{t("nativePoolHint")}</p>
         ) : (
@@ -327,7 +341,15 @@ export function LinkPanel({
           </label>
         </div>
         <p className="small muted">
-          {t(status.native ? "nativeHealthHint" : "destinationRequired")}
+          {t(
+            status.native
+              ? "nativeHealthHint"
+              : value.ports.some(
+                    (p) => String(p.public).includes("-") || p.exclude?.length,
+                  )
+                ? "rangeHealthHint"
+                : "destinationRequired",
+          )}
         </p>
         <ErrorMessage error={error || methods.error} />
         <div className="inspector-footer">

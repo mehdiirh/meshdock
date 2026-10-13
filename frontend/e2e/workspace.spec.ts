@@ -53,8 +53,8 @@ test.beforeEach(async ({ page }) => {
       "/api/v1/topology": topology,
       "/api/v1/jobs": [],
       "/api/v1/methods": [
-        { id: "gre", name: "GRE", encrypted: false, mapping: { native_ranges: true, max_ports: 65535, max_listener_ports: 512 } },
-        { id: "rathole", name: "Rathole", encrypted: true, mapping: { native_ranges: false, max_ports: 512, max_listener_ports: 512 } },
+        { id: "gre", name: "GRE", encrypted: false, mapping: { native_ranges: true, max_ports: 65535, max_listener_ports: 65535 } },
+        { id: "rathole", name: "Rathole", encrypted: true, mapping: { native_ranges: false, max_ports: 65535, max_listener_ports: 65535 } },
       ],
     };
     if (route.request().method() === "PUT")
@@ -100,16 +100,16 @@ test("switches appearance and renders Persian RTL without losing the topology", 
   await expect(page.locator(".server-node")).toHaveCount(2);
 });
 
-test("preserves range exceptions and blocks an incompatible method switch", async ({ page }) => {
+test("preserves full ranges and exceptions when switching methods", async ({ page }) => {
   await page.getByText("GRE", { exact: true }).click();
   await page.getByLabel("Entry port 1", { exact: true }).fill("1023-65535");
   await page.getByLabel("Destination port 1", { exact: true }).fill("1023-65535");
   await page.getByLabel("Excluded entry ports 1", { exact: true }).fill("2222, 8080-8081");
   await expect(page.getByText("64510 TCP ports", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Rathole", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("up to 512");
-  await expect(page.getByRole("button", { name: "Save & deploy", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "GRE", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText("Individual transport listeners · capacity checked on the server")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save & deploy", exact: true })).toBeEnabled();
   const saved = page.waitForRequest(r => r.method() === "PUT" && r.url().endsWith("/topology"));
   await page.getByRole("button", { name: "Save & deploy", exact: true }).click();
   expect((await saved).postDataJSON().links[0].ports[0]).toEqual({ public: "1023-65535", target: "1023-65535", host: "127.0.0.1", exclude: ["2222", "8080-8081"] });

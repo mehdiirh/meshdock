@@ -61,6 +61,7 @@ def preview(actor=Depends(require("read"))):
             "udp_ports": p["udp_listeners"],
             "method_count": p["method_count"],
             "forwarded_ranges": p["forwarded_ranges"],
+            "resources": p["resources"],
         }
         for id, p in plans.items()
     ]

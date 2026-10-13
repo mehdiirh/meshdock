@@ -1,11 +1,13 @@
 import { expect, it } from "vitest";
-import { mappingSegments, mappingStatus } from "./ports";
+import { compactPorts, mappingSegments, mappingStatus } from "./ports";
 import type { MethodInfo } from "./types";
 
 const gre = {
   mapping: { native_ranges: true, max_ports: 65535 },
 } as MethodInfo;
-const ssh = { mapping: { native_ranges: false, max_ports: 64 } } as MethodInfo;
+const ssh = {
+  mapping: { native_ranges: false, max_ports: 65535 },
+} as MethodInfo;
 const range = {
   public: "1023-65535",
   target: "1023-65535",
@@ -25,8 +27,9 @@ it("keeps the full GRE range compact and preserves explicit exceptions", () => {
     error: "",
   });
 });
-it("switching methods immediately invalidates incompatible ranges", () => {
-  expect(mappingStatus([range], ssh, 2222).error).toBe("mappingLimit");
+it("switching to a socket transport keeps valid full ranges", () => {
+  expect(mappingStatus([range], ssh, 2222).error).toBe("");
+  expect(mappingStatus([range], ssh, 2222).native).toBe(false);
   expect(range.exclude).toEqual([2222, "8080-8081"]);
 });
 it("checks widths, exceptions, and management access", () => {
@@ -57,4 +60,14 @@ it("detects overlapping rows but permits excluded ports in a separate row", () =
       gre,
     ).error,
   ).toBe("mappingOverlap");
+});
+
+it("keeps large deployment previews compact without hiding gaps", () => {
+  expect(compactPorts([443, 1023, 1024, 1026, 1027, 65535, 443])).toBe(
+    "443, 1023-1024, 1026-1027, 65535",
+  );
+  expect(compactPorts(Array.from({ length: 65535 }, (_, i) => i + 1))).toBe(
+    "1-65535",
+  );
+  expect(compactPorts([])).toBe("");
 });

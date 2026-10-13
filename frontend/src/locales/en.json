@@ -181,7 +181,7 @@
   "mappedPortCount_one": "{{count}} TCP port",
   "mappedPortCount_other": "{{count}} TCP ports",
   "nativeRangeMode": "Native kernel forwarding · compact range rules",
-  "expandedRangeMode": "Individual transport listeners · app limit: {{max}} ports per connection",
+  "expandedRangeMode": "Individual transport listeners · capacity checked on the server",
   "mappingPlatform": "Supported hosts: Debian / Ubuntu, systemd, IPv4. Application mappings: TCP.",
   "invalidRange": "Enter a port or an ascending range from 1 to 65535, for example 8000-8099.",
   "rangeWidth": "Entry and target ranges must contain the same number of ports.",
@@ -189,9 +189,15 @@
   "emptyMapping": "At least one port must remain after exceptions.",
   "mappingOverlap": "Mapping rows overlap. Split the ranges or add explicit exceptions.",
   "mappingSshConflict": "This range includes the entry server’s SSH port. Exclude it to preserve access.",
-  "mappingLimit": "This method supports up to {{max}} mapped ports per connection in this app. Reduce the range or select another method.",
+  "mappingLimit": "This mapping exceeds this method’s port space ({{max}}). Check the ranges and exceptions.",
   "actualPortConflicts": "No blanket reserved port range. Topology conflicts are checked on save; live server listeners are checked before deployment.",
   "nativePoolHint": "Native GRE ranges must be exclusive on this entry. Shared-port load balancing is available for individual GRE ports and socket-based methods.",
   "nativeHealthHint": "Range health checks test the GRE peer, not every destination port. Closed application ports can remain in the range.",
-  "forwardedRanges": "Kernel-forwarded ranges"
+  "forwardedRanges": "Kernel-forwarded ranges",
+  "socketCapacityHint": "Each mapped port needs a public listener and a private transport listener. Large ranges use more memory and file descriptors; they do not guarantee more speed.",
+  "sshSessionCount_one": "{{count}} SSH session · up to {{size}} forwards per session",
+  "sshSessionCount_other": "{{count}} SSH sessions · up to {{size}} forwards per session",
+  "rangeHealthHint": "Ranges check all tunnel listeners, not every destination service. You can start services later. Pool health samples the transport; it does not detect individual destination outages.",
+  "resourcePlan": "{{count}} planned listening sockets · per-process file limit {{nofile}} · estimated descriptor budget {{budget}}. Live limits are checked before deployment; memory and throughput still depend on the server.",
+  "outgoingPortHint": "The server also needs free ports for outgoing TCP connections. If a large range consumes that space on its egress IP, deployment asks for explicit exceptions or a separate ingress IP."
 }

@@ -1,4 +1,5 @@
 import { removeServer, replaceServer, replaceLink } from "../topology";
+import { compactPorts } from "../ports";
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -85,6 +86,11 @@ export function Workspace({
           files: string[];
           ports: number[];
           udp_ports: number[];
+          resources?: {
+            listeners: number;
+            nofile: number;
+            descriptor_budget: number;
+          };
           forwarded_ranges: {
             address: string;
             protocol: string;
@@ -687,12 +693,21 @@ export function Workspace({
                 <h3>
                   {topology.servers.find((s) => s.id === p.server_id)?.name}
                 </h3>
+                {p.resources && (
+                  <p className="small muted">
+                    {t("resourcePlan", {
+                      count: p.resources.listeners,
+                      nofile: p.resources.nofile,
+                      budget: p.resources.descriptor_budget,
+                    })}
+                  </p>
+                )}
                 <strong>{t("units")}</strong>
                 <pre>{p.units.join("\n") || "—"}</pre>
                 <strong>{t("files")}</strong>
                 <pre>{p.files.join("\n") || "—"}</pre>
                 <strong>{t("ports")}</strong>
-                <code>{p.ports.join(", ") || "—"}</code>
+                <code>{compactPorts(p.ports) || "—"}</code>
                 {!!p.forwarded_ranges?.length && (
                   <>
                     <strong>{t("forwardedRanges")}</strong>
@@ -707,7 +722,7 @@ export function Workspace({
                   </>
                 )}
                 <strong>{t("udpPorts")}</strong>
-                <code>{p.udp_ports?.join(", ") || "—"}</code>
+                <code>{compactPorts(p.udp_ports || []) || "—"}</code>
               </article>
             ))}
           </div>
