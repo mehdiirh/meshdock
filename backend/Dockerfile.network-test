@@ -10,5 +10,5 @@ RUN uv sync --frozen --no-install-project
 COPY app ./app
 COPY tests ./tests
 ENTRYPOINT []
-ENV TM_TEST_LINUX_NETWORK=1 TM_DATA_DIR=/tmp/meshdock-tests
+ENV MESHDOCK_TEST_LINUX_NETWORK=1 MESHDOCK_DATA_DIR=/tmp/meshdock-tests
 CMD ["uv", "run", "--no-sync", "pytest", "-q", "tests/test_gre_linux.py"]

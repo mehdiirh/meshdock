@@ -25,12 +25,12 @@ def compact(rules):
 
 
 def script(namespace, rules):
-    chain = "TM_" + namespace.upper()
+    chain = "MESHDOCK_" + namespace.upper()
     lines = [
         "#!/bin/sh",
         "set -eu",
         f"iptables -w -N {chain} 2>/dev/null || true",
-        "iptables-restore -w --noflush <<'TM_RULES'",
+        "iptables-restore -w --noflush <<'MESHDOCK_RULES'",
         "*filter",
         f"-F {chain}",
     ]
@@ -46,7 +46,7 @@ def script(namespace, rules):
     lines.extend(
         [
             "COMMIT",
-            "TM_RULES",
+            "MESHDOCK_RULES",
             f"iptables -w -C INPUT -j {chain} 2>/dev/null || iptables -w -I INPUT 1 -j {chain}",
             "",
         ]

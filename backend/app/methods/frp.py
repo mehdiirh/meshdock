@@ -78,7 +78,7 @@ remotePort = {context.internal(index)}
         for plan, binary in ((entry, "frps"), (exit, "frpc")):
             plan["binaries"].append(binary)
             plan["units"][context.tag + ".service"] = service(
-                f"/var/lib/tunnel-manager/{context.namespace}/bin/{binary} -c {context.root}/{name}.toml"
+                f"/var/lib/meshdock/{context.namespace}/bin/{binary} -c {context.root}/{name}.toml"
             )
         entry["listeners"].extend([context.control, websocket_port])
         entry["firewall"].append(

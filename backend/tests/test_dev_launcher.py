@@ -44,7 +44,7 @@ elif "app.worker" in arguments:
 else:
     role = "locales" if "backend/compile_locales.py" in arguments else "sync"
 values = {key: os.environ.get(key) for key in (
-    "TM_DEMO", "TM_DATA_DIR", "TM_MASTER_KEY_FILE", "TM_PUBLIC_ORIGIN", "TM_COOKIE_SECURE"
+    "MESHDOCK_DEMO", "MESHDOCK_DATA_DIR", "MESHDOCK_MASTER_KEY_FILE", "MESHDOCK_PUBLIC_ORIGIN", "MESHDOCK_COOKIE_SECURE"
 )}
 (records / (role + ".json")).write_text(json.dumps(values))
 if role == "frontend":
@@ -64,15 +64,15 @@ if role == "frontend":
     environment.update(
         PATH=f"{binaries}:/usr/bin:/bin",
         LAUNCHER_RECORDS=str(tmp_path / "records"),
-        TM_DATA_DIR=str(tmp_path / "must-not-use"),
-        TM_MASTER_KEY_FILE=str(tmp_path / "must-not-use.key"),
+        MESHDOCK_DATA_DIR=str(tmp_path / "must-not-use"),
+        MESHDOCK_MASTER_KEY_FILE=str(tmp_path / "must-not-use.key"),
     )
 
     def run(*arguments, inherited_demo="false"):
         return subprocess.run(
             ["/bin/sh", str(scripts / "dev.sh"), *arguments],
             cwd=tmp_path,
-            env={**environment, "TM_DEMO": inherited_demo},
+            env={**environment, "MESHDOCK_DEMO": inherited_demo},
             capture_output=True,
             text=True,
             timeout=15,
@@ -96,9 +96,9 @@ def test_explicit_flag_controls_all_processes(
     project, records, run = launcher
     config = project / ".env"
     original = (
-        f"TM_DEMO={configured_demo}\n"
-        "TM_DATA_DIR=/must-not-use\n"
-        "TM_MASTER_KEY_FILE=/must-not-use.key\n"
+        f"MESHDOCK_DEMO={configured_demo}\n"
+        "MESHDOCK_DATA_DIR=/must-not-use\n"
+        "MESHDOCK_MASTER_KEY_FILE=/must-not-use.key\n"
     )
     config.write_text(original)
     result = run(*arguments, inherited_demo=inherited_demo)
@@ -115,11 +115,11 @@ def test_explicit_flag_controls_all_processes(
     }
     for path in records.iterdir():
         assert json.loads(path.read_text()) == {
-            "TM_DEMO": "true" if expected_mode == "demo" else "false",
-            "TM_DATA_DIR": str(project / ".data" / expected_mode),
-            "TM_MASTER_KEY_FILE": str(project / ".data" / expected_mode / "master.key"),
-            "TM_PUBLIC_ORIGIN": "http://127.0.0.1:5177",
-            "TM_COOKIE_SECURE": "false",
+            "MESHDOCK_DEMO": "true" if expected_mode == "demo" else "false",
+            "MESHDOCK_DATA_DIR": str(project / ".data" / expected_mode),
+            "MESHDOCK_MASTER_KEY_FILE": str(project / ".data" / expected_mode / "master.key"),
+            "MESHDOCK_PUBLIC_ORIGIN": "http://127.0.0.1:5177",
+            "MESHDOCK_COOKIE_SECURE": "false",
         }
 
 
@@ -129,10 +129,10 @@ def test_fresh_configuration_stays_safe_on_disk(launcher, arguments):
     result = run(*arguments)
     assert result.returncode == 0, result.stderr
     config = project / ".env"
-    assert "TM_DEMO=true\n" in config.read_text()
+    assert "MESHDOCK_DEMO=true\n" in config.read_text()
     assert config.stat().st_mode & 0o777 == 0o600
     expected_demo = "false" if arguments else "true"
-    assert json.loads((records / "worker.json").read_text())["TM_DEMO"] == expected_demo
+    assert json.loads((records / "worker.json").read_text())["MESHDOCK_DEMO"] == expected_demo
 
 
 @pytest.mark.parametrize(
@@ -151,4 +151,4 @@ def test_help_and_invalid_arguments_have_no_side_effects(launcher, arguments, ex
 def test_environment_templates_match_and_default_to_demo():
     sample = (PROJECT / "sample.env").read_text()
     assert sample == (PROJECT / ".env.example").read_text()
-    assert "\nTM_DEMO=true\n" in sample
+    assert "\nMESHDOCK_DEMO=true\n" in sample

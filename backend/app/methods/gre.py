@@ -51,7 +51,8 @@ class GRE(Adapter):
     def configure(self, context, entry, exit):
         first = int(IPv4Address("10.253.0.0")) + context.link["slot"] * 4
         ip_a, ip_b = str(IPv4Address(first + 1)), str(IPv4Address(first + 2))
-        iface = "tm" + context.namespace[:6] + str(context.link["slot"])
+        # Linux interface names must stay within 15 bytes, including the largest slot.
+        iface = "md" + context.namespace[:6] + str(context.link["slot"])
         for plan, local, peer, ip in (
             (entry, context.entry, context.exit, ip_a),
             (exit, context.exit, context.entry, ip_b),

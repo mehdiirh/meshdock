@@ -10,6 +10,8 @@ def test_login_session_csrf_and_scope(admin):
     response = admin.post("/api/v1/keys", json={"name": "monitor", "scope": "read"})
     assert response.status_code == 201
     key = response.json()
+    assert key["token"].startswith("meshdock_")
+    assert admin.get("/api/v1/keys").json()[0]["prefix"] == key["token"][:16]
     admin.cookies.clear()
     admin.headers["Authorization"] = "Bearer " + key["token"]
     assert admin.get("/api/v1/topology").status_code == 200

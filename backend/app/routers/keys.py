@@ -27,12 +27,12 @@ def keys(actor=Depends(require("admin"))):
 
 @router.post("/keys", status_code=201)
 def key(body: models.ApiKey, actor=Depends(require("admin"))):
-    token = "tm_" + secrets.token_urlsafe(40)
+    token = "meshdock_" + secrets.token_urlsafe(40)
     id = uid()
     with connect(True) as db:
         db.execute(
             "INSERT INTO api_keys(id,name,prefix,token_hash,scope,created) VALUES(?,?,?,?,?,?)",
-            (id, body.name, token[:10], digest(token), body.scope, time.time()),
+            (id, body.name, token[:16], digest(token), body.scope, time.time()),
         )
         audit(db, actor, "key_created", id)
     return {"id": id, "token": token}

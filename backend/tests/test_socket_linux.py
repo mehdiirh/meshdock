@@ -19,7 +19,7 @@ from app.remote_agent import Agent, OperationError
 from app.topology import material
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("TM_TEST_LINUX_NETWORK") != "1"
+    os.getenv("MESHDOCK_TEST_LINUX_NETWORK") != "1"
     or platform.system() != "Linux"
     or not Path("/.dockerenv").exists(),
     reason="Requires the disposable Linux test container",
@@ -63,7 +63,7 @@ def plans(monkeypatch, method, public="1023-65535", target="1023-65535", exclusi
 
 
 def write_files(tmp_path, compiled):
-    root = "/var/lib/tunnel-manager/abcdef1234/current"
+    root = "/var/lib/meshdock/abcdef1234/current"
     folders = {}
     for role, plan in compiled.items():
         folder = tmp_path / role
@@ -190,7 +190,7 @@ def test_reverse_ssh_4097_listeners_and_both_session_boundaries(tmp_path, monkey
 
 
 def test_socket_listeners_can_exhaust_outgoing_source_ports():
-    namespace = f"tm-egress-{os.getpid()}"
+    namespace = f"meshdock-egress-{os.getpid()}"
     subprocess.run(["ip", "netns", "add", namespace], check=True, capture_output=True)
     try:
         prefix = ["ip", "netns", "exec", namespace]

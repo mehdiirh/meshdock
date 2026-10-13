@@ -1,6 +1,6 @@
 """Optional real binary tests; only loopback listeners, never SSH or a real server.
 
-Set TM_TEST_BIN_DIR to a directory containing checksum-verified platform binaries.
+Set MESHDOCK_TEST_BIN_DIR to a directory containing checksum-verified platform binaries.
 """
 
 import os
@@ -52,7 +52,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
             copy(upstream, self.request)
 
 
-BINARIES = os.getenv("TM_TEST_BIN_DIR")
+BINARIES = os.getenv("MESHDOCK_TEST_BIN_DIR")
 
 
 class Echo(socketserver.BaseRequestHandler):
@@ -62,7 +62,7 @@ class Echo(socketserver.BaseRequestHandler):
 
 
 @pytest.mark.skipif(
-    not BINARIES, reason="Set TM_TEST_BIN_DIR for opt-in real transport smoke tests"
+    not BINARIES, reason="Set MESHDOCK_TEST_BIN_DIR for opt-in real transport smoke tests"
 )
 @pytest.mark.parametrize(
     "method,binaries",

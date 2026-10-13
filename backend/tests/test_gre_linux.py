@@ -18,7 +18,7 @@ from app.methods.base import Context
 from app.planner import empty
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("TM_TEST_LINUX_NETWORK") != "1" or platform.system() != "Linux",
+    os.getenv("MESHDOCK_TEST_LINUX_NETWORK") != "1" or platform.system() != "Linux",
     reason="Opt-in disposable Linux namespace test",
 )
 
@@ -34,7 +34,7 @@ def inside(ns, *args, check=True):
 @pytest.fixture
 def network(tmp_path):
     suffix = str(os.getpid())
-    client, entry, exit = [f"tm-test-{suffix}-{side}" for side in ("c", "e", "x")]
+    client, entry, exit = [f"meshdock-test-{suffix}-{side}" for side in ("c", "e", "x")]
     processes = []
     try:
         for ns in (client, entry, exit):
@@ -164,7 +164,7 @@ def test_real_gre_range_packets_exclusions_switch_rollback_and_cleanup(network):
     broken.mkdir()
     current = net.root / net.entry / "current"
     failed_plan = json.loads((current / "manifest.json").read_text())
-    failed_plan["network_rules"]["post"] = ["-j INVALID_TM_TEST"]
+    failed_plan["network_rules"]["post"] = ["-j INVALID_MESHDOCK_TEST"]
     (broken / "manifest.json").write_text(json.dumps(failed_plan))
     helper(net, net.entry, "a.network_down()")
     current.unlink()
@@ -178,7 +178,7 @@ def test_real_gre_range_packets_exclusions_switch_rollback_and_cleanup(network):
         check=False,
     )
     assert result.returncode != 0
-    assert "TM_AAAAAAAAAA_PRE" not in inside(net.entry, "iptables-save").stdout
+    assert "MESHDOCK_AAAAAAAAAA_PRE" not in inside(net.entry, "iptables-save").stdout
     assert inside(net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/forwarding").stdout == before
     # Restore the prior generation's compact plan, as rollback does.
     for ns in (net.entry, net.exit):
@@ -193,7 +193,7 @@ def test_real_gre_range_packets_exclusions_switch_rollback_and_cleanup(network):
     for ns in (net.entry, net.exit):
         helper(net, ns, "a.network_down(); a.firewall([]); a.network_down()")
         rules = inside(ns, "iptables-save").stdout
-        assert "TM_AAAAAAAAAA" not in rules
+        assert "MESHDOCK_AAAAAAAAAA" not in rules
         assert "UNRELATED_TEST" in rules
     assert inside(net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/forwarding").stdout == before
     request(net, 30000, succeeds=False)

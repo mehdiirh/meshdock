@@ -12,7 +12,7 @@ def environment(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "KEY", tmp_path / "master.key")
     monkeypatch.setattr(settings, "COOKIE_SECURE", False)
     monkeypatch.setattr(settings, "DEMO", True)
-    monkeypatch.setenv("TM_ADMIN_PASSWORD", "development-only-password")
+    monkeypatch.setenv("MESHDOCK_ADMIN_PASSWORD", "development-only-password")
     initialize()
     return tmp_path
 

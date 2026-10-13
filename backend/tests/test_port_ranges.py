@@ -6,6 +6,7 @@ import pytest
 from app import remote_agent, topology
 from app.db import connect
 from app.methods import REGISTRY
+from app.methods.base import Context
 from app.planner import build, empty
 from app.ports import expand, segments
 from app.remote_agent import Agent, OperationError
@@ -270,7 +271,7 @@ def test_gre_shifted_ranges_require_supported_kernel(tmp_path, monkeypatch):
     agent = Agent("a" * 10, root=tmp_path)
     monkeypatch.setattr(remote_agent.platform, "release", lambda: "4.15.0-test")
     plan = empty()
-    plan["network_interfaces"] = ["tmtest"]
+    plan["network_interfaces"] = ["mdtest"]
     plan["shifted_ranges"] = True
     with pytest.raises(OperationError, match="range_kernel_unsupported"):
         agent.network_preflight(plan)
@@ -464,3 +465,24 @@ def test_outgoing_ports_use_live_kernel_range_and_egress_address(tmp_path, monke
     agent.outgoing_port_preflight(plan)  # Separate ingress IP does not exhaust egress.
     plan["sockets"] = []  # Kernel forwarding doesn't bind all public ports.
     agent.outgoing_port_preflight(plan)
+
+
+def test_largest_gre_slot_respects_linux_resource_name_limits(tmp_path):
+    namespace = "abcdef1234"
+    agent = Agent(namespace, root=tmp_path)
+    context = Context(
+        namespace,
+        {
+            "slot": 1000,
+            "ports": [{"public": "8000-8099", "target": "8000-8099", "host": "127.0.0.1"}],
+        },
+        {"address": "192.0.2.10"},
+        {"address": "198.51.100.10"},
+        {},
+    )
+    entry, exit = empty(), empty()
+    REGISTRY["gre"].configure(context, entry, exit)
+    for plan in (entry, exit):
+        assert all(len(item["name"].encode()) <= 15 for item in plan["interfaces"])
+        assert all(unit.startswith(agent.prefix) for unit in plan["units"])
+    assert all(len(chain) <= 28 for _, _, chain in agent.network_chains().values())

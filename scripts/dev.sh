@@ -14,12 +14,12 @@ HELP
 }
 
 case "$#:${1-}" in
-    0:) tm_dev_mode=demo ;;
-    1:--prod) tm_dev_mode=prod ;;
+    0:) meshdock_dev_mode=demo ;;
+    1:--prod) meshdock_dev_mode=prod ;;
     1:--help|1:-h) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
-readonly tm_dev_mode
+readonly meshdock_dev_mode
 
 cd "$(dirname "$0")/.."
 if [ ! -f .env ]; then python3 scripts/setup.py --demo; fi
@@ -27,19 +27,19 @@ set -a
 . ./.env
 set +a
 # Apply these AFTER .env so neither it nor inherited variables can enable SSH.
-case "$tm_dev_mode" in
-    demo) export TM_DEMO=true ;;
-    prod) export TM_DEMO=false ;;
+case "$meshdock_dev_mode" in
+    demo) export MESHDOCK_DEMO=true ;;
+    prod) export MESHDOCK_DEMO=false ;;
 esac
 # Never share simulated jobs, topology or encrypted credentials with real mode.
-export TM_DATA_DIR="$PWD/.data/$tm_dev_mode"
-export TM_MASTER_KEY_FILE="$TM_DATA_DIR/master.key"
-printf 'MeshDock — Mode: %s (TM_DEMO=%s)\nData: %s\n' "$tm_dev_mode" "$TM_DEMO" "$TM_DATA_DIR"
-if [ "$tm_dev_mode" = prod ]; then
+export MESHDOCK_DATA_DIR="$PWD/.data/$meshdock_dev_mode"
+export MESHDOCK_MASTER_KEY_FILE="$MESHDOCK_DATA_DIR/master.key"
+printf 'MeshDock — Mode: %s (MESHDOCK_DEMO=%s)\nData: %s\n' "$meshdock_dev_mode" "$MESHDOCK_DEMO" "$MESHDOCK_DATA_DIR"
+if [ "$meshdock_dev_mode" = prod ]; then
     printf '%s\n' 'Real deployments enabled: saving tunnel changes can modify your servers.'
 fi
-export TM_PUBLIC_ORIGIN=http://127.0.0.1:5177
-export TM_COOKIE_SECURE=false
+export MESHDOCK_PUBLIC_ORIGIN=http://127.0.0.1:5177
+export MESHDOCK_COOKIE_SECURE=false
 uv sync --project backend --frozen
 uv run --project backend --no-sync python backend/compile_locales.py
 npm --prefix frontend ci --no-audit --no-fund

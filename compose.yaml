@@ -1,16 +1,14 @@
-# Keep this deployment identity stable to reuse existing containers and volumes.
-# MeshDock branding does not migrate persisted infrastructure identifiers.
-name: tunnel-manager
+name: meshdock
 x-backend: &backend
   build: ./backend
   image: meshdock-backend:local
   restart: unless-stopped
-  volumes: [manager-data:/data]
+  volumes: [meshdock-data:/data]
   environment: &environment
-    TM_DATA_DIR: /data
-    TM_PUBLIC_ORIGIN: ${TM_PUBLIC_ORIGIN:-http://localhost:8080}
-    TM_COOKIE_SECURE: ${TM_COOKIE_SECURE:-true}
-    TM_DEMO: ${TM_DEMO:-false}
+    MESHDOCK_DATA_DIR: /data
+    MESHDOCK_PUBLIC_ORIGIN: ${MESHDOCK_PUBLIC_ORIGIN:-http://localhost:8080}
+    MESHDOCK_COOKIE_SECURE: ${MESHDOCK_COOKIE_SECURE:-true}
+    MESHDOCK_DEMO: ${MESHDOCK_DEMO:-false}
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
   read_only: true
@@ -24,8 +22,8 @@ services:
     <<: *backend
     environment:
       <<: *environment
-      TM_ADMIN_USERNAME: ${TM_ADMIN_USERNAME:-admin}
-      TM_ADMIN_PASSWORD: ${TM_ADMIN_PASSWORD:?Run scripts/setup.py first}
+      MESHDOCK_ADMIN_USERNAME: ${MESHDOCK_ADMIN_USERNAME:-admin}
+      MESHDOCK_ADMIN_PASSWORD: ${MESHDOCK_ADMIN_PASSWORD:?Run scripts/setup.py first}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 15s
@@ -38,7 +36,7 @@ services:
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
-      test: [CMD, python, -c, "import sqlite3,time; d=sqlite3.connect('/data/manager.sqlite3'); r=d.execute('SELECT until FROM leader WHERE id=1').fetchone(); assert r and r[0]>time.time()"]
+      test: [CMD, python, -c, "import sqlite3,time; d=sqlite3.connect('/data/meshdock.sqlite3'); r=d.execute('SELECT until FROM leader WHERE id=1').fetchone(); assert r and r[0]>time.time()"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -47,7 +45,7 @@ services:
     build: ./frontend
     image: meshdock-web:local
     restart: unless-stopped
-    ports: ['127.0.0.1:${TM_PORT:-8080}:8080']
+    ports: ['127.0.0.1:${MESHDOCK_PORT:-8080}:8080']
     depends_on:
       api: {condition: service_healthy}
     security_opt: [no-new-privileges:true]
@@ -64,7 +62,7 @@ services:
     profiles: [tls]
     restart: unless-stopped
     environment:
-      TM_DOMAIN: ${TM_DOMAIN:-localhost}
+      MESHDOCK_DOMAIN: ${MESHDOCK_DOMAIN:-localhost}
     ports: ['80:80', '443:443']
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -72,6 +70,6 @@ services:
       - caddy-config:/config
     depends_on: [web]
 volumes:
-  manager-data:
+  meshdock-data:
   caddy-data:
   caddy-config:

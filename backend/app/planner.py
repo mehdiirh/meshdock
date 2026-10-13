@@ -69,7 +69,7 @@ def build(snapshot):
             pool[mapping["public"]].append((host, port, link, mapping.get("health_group", 0)))
         config = f"""global
   maxconn 65536
-  stats socket /run/tm-{namespace}-stats.sock mode 600 level admin
+  stats socket /run/meshdock-{namespace}-stats.sock mode 600 level admin
   hard-stop-after 30s
 defaults
   mode tcp
@@ -131,19 +131,19 @@ defaults
             plan["listeners"].append(relay["port"])
         if pool or relays:
             plan["files"]["haproxy.cfg"] = config
-            plan["units"][f"tm-{namespace}-router.service"] = service(
-                f"/usr/sbin/haproxy -Ws -f /var/lib/tunnel-manager/{namespace}/current/haproxy.cfg -p /run/tm-{namespace}-haproxy.pid",
+            plan["units"][f"meshdock-{namespace}-router.service"] = service(
+                f"/usr/sbin/haproxy -Ws -f /var/lib/meshdock/{namespace}/current/haproxy.cfg -p /run/meshdock-{namespace}-haproxy.pid",
                 extra="ExecReload=/bin/kill -USR2 $MAINPID\nKillMode=mixed",
                 kind="notify",
             )
         if plan["network_interfaces"]:
             gre_units = [name for name in plan["units"] if name.endswith("-gre.service")]
             unit = service(
-                f"/usr/bin/python3 /var/lib/tunnel-manager/{namespace}/agent.py --network-up {namespace}",
-                extra=f"RemainAfterExit=yes\nExecStopPost=/usr/bin/python3 /var/lib/tunnel-manager/{namespace}/agent.py --network-down {namespace}",
+                f"/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-up {namespace}",
+                extra=f"RemainAfterExit=yes\nExecStopPost=/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-down {namespace}",
                 kind="oneshot",
             )
-            plan["units"][f"tm-{namespace}-network.service"] = unit.replace(
+            plan["units"][f"meshdock-{namespace}-network.service"] = unit.replace(
                 "After=network-online.target",
                 "After=network-online.target "
                 + " ".join(gre_units)
@@ -155,8 +155,8 @@ defaults
             from .firewall import script
 
             plan["files"]["firewall.sh"] = script(namespace, plan["firewall"])
-            plan["units"][f"tm-{namespace}-firewall.service"] = service(
-                f"/bin/sh /var/lib/tunnel-manager/{namespace}/current/firewall.sh",
+            plan["units"][f"meshdock-{namespace}-firewall.service"] = service(
+                f"/bin/sh /var/lib/meshdock/{namespace}/current/firewall.sh",
                 extra="RemainAfterExit=yes",
                 kind="oneshot",
             )

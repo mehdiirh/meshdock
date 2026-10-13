@@ -110,7 +110,7 @@ class Remote:
         self.command(
             "command -v python3 >/dev/null || (DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3)"
         )
-        path = "/var/lib/tunnel-manager/" + self.ns
+        path = "/var/lib/meshdock/" + self.ns
         self.command("install -d -m 700 " + path)
         sftp = paramiko.SFTPClient.from_transport(self.t)
         try:
@@ -123,7 +123,7 @@ class Remote:
 
     def call(self, action, payload):
         raw = self.command(
-            "python3 /var/lib/tunnel-manager/" + self.ns + "/agent.py",
+            "python3 /var/lib/meshdock/" + self.ns + "/agent.py",
             json.dumps({"namespace": self.ns, "action": action, **payload}).encode(),
             timeout=1200 if action == "prepare" else 360,
         )

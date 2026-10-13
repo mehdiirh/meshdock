@@ -60,20 +60,20 @@ def bootstrap():
     cipher()
     with connect(True) as db:
         if not db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
-            password = os.getenv("TM_ADMIN_PASSWORD", "")
-            path = os.getenv("TM_ADMIN_PASSWORD_FILE")
+            password = os.getenv("MESHDOCK_ADMIN_PASSWORD", "")
+            path = os.getenv("MESHDOCK_ADMIN_PASSWORD_FILE")
             if path:
                 with open(path) as password_file:
                     password = password_file.read().strip()
             if len(password) < 12:
                 raise RuntimeError(
-                    "Set TM_ADMIN_PASSWORD or TM_ADMIN_PASSWORD_FILE (minimum 12 characters) for first startup."
+                    "Set MESHDOCK_ADMIN_PASSWORD or MESHDOCK_ADMIN_PASSWORD_FILE (minimum 12 characters) for first startup."
                 )
             db.execute(
                 "INSERT INTO users VALUES(?,?,?,?)",
                 (
                     uid(),
-                    os.getenv("TM_ADMIN_USERNAME", "admin"),
+                    os.getenv("MESHDOCK_ADMIN_USERNAME", "admin"),
                     hasher.hash(password),
                     time.time(),
                 ),
@@ -102,7 +102,7 @@ def principal(request: Request, required="read"):
                 raise AppError("forbidden", 403)
             db.execute("UPDATE api_keys SET last_used=? WHERE id=?", (time.time(), key["id"]))
             return "key:" + key["id"]
-        token = request.cookies.get("tm_session", "")
+        token = request.cookies.get("meshdock_session", "")
         session = db.execute(
             "SELECT * FROM sessions WHERE token_hash=? AND expires>?",
             (digest(token), time.time()),

@@ -14,11 +14,11 @@ class Context:
 
     @property
     def tag(self):
-        return f"tm-{self.namespace}-{self.link['slot']}"
+        return f"meshdock-{self.namespace}-{self.link['slot']}"
 
     @property
     def root(self):
-        return f"/var/lib/tunnel-manager/{self.namespace}/current"
+        return f"/var/lib/meshdock/{self.namespace}/current"
 
     @property
     def control(self):

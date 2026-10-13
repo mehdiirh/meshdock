@@ -32,13 +32,13 @@ project = Path(__file__).resolve().parents[1]
 password = secrets.token_urlsafe(24)
 content = "\n".join(
     [
-        "TM_ADMIN_USERNAME=admin",
-        "TM_ADMIN_PASSWORD=" + password,
-        "TM_PUBLIC_ORIGIN=" + arguments.origin.rstrip("/"),
-        "TM_DOMAIN=" + origin.hostname,
-        "TM_COOKIE_SECURE=" + str(origin.scheme == "https").lower(),
-        "TM_DEMO=" + str(arguments.demo).lower(),
-        "TM_PORT=8080",
+        "MESHDOCK_ADMIN_USERNAME=admin",
+        "MESHDOCK_ADMIN_PASSWORD=" + password,
+        "MESHDOCK_PUBLIC_ORIGIN=" + arguments.origin.rstrip("/"),
+        "MESHDOCK_DOMAIN=" + origin.hostname,
+        "MESHDOCK_COOKIE_SECURE=" + str(origin.scheme == "https").lower(),
+        "MESHDOCK_DEMO=" + str(arguments.demo).lower(),
+        "MESHDOCK_PORT=8080",
         "",
     ]
 )
@@ -48,4 +48,4 @@ except FileExistsError:
     parser.exit("Configuration already exists; refusing to overwrite .env.\n")
 with os.fdopen(fd, "w") as output:
     output.write(content)
-print("Created MeshDock .env (owner-only). Read TM_ADMIN_PASSWORD there to sign in as admin.")
+print("Created MeshDock .env (owner-only). Read MESHDOCK_ADMIN_PASSWORD there to sign in as admin.")

@@ -56,7 +56,7 @@ def login(body: models.Login, request: Request, response: Response):
     if not ok:
         raise AppError("invalid_login", 401)
     response.set_cookie(
-        "tm_session",
+        "meshdock_session",
         token,
         max_age=settings.SESSION_HOURS * 3600,
         httponly=True,
@@ -74,7 +74,7 @@ def me(request: Request, actor=Depends(require("read"))):
             row = db.execute("SELECT username FROM users WHERE id=?", (actor[5:],)).fetchone()
             session = db.execute(
                 "SELECT csrf FROM sessions WHERE token_hash=?",
-                (digest(request.cookies.get("tm_session", "")),),
+                (digest(request.cookies.get("meshdock_session", "")),),
             ).fetchone()
             return {
                 "username": row["username"],
@@ -89,9 +89,9 @@ def logout(request: Request, response: Response, actor=Depends(require("read")))
     with connect(True) as db:
         db.execute(
             "DELETE FROM sessions WHERE token_hash=?",
-            (digest(request.cookies.get("tm_session", "")),),
+            (digest(request.cookies.get("meshdock_session", "")),),
         )
-    response.delete_cookie("tm_session", path="/api")
+    response.delete_cookie("meshdock_session", path="/api")
     return {"ok": True}
 
 

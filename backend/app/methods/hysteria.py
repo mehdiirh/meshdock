@@ -61,7 +61,7 @@ class Hysteria2(Adapter):
         for plan, role, config in ((entry, "client", client), (exit, "server", server)):
             plan["files"][name + ".json"] = json.dumps(config, indent=2)
             plan["units"][context.tag + ".service"] = service(
-                f"/var/lib/tunnel-manager/{context.namespace}/bin/hysteria {role} -c {context.root}/{name}.json"
+                f"/var/lib/meshdock/{context.namespace}/bin/hysteria {role} -c {context.root}/{name}.json"
             )
         exit["udp_listeners"].append(context.control)
         exit["firewall"].append(

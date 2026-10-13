@@ -463,7 +463,10 @@ export function Workspace({
                     key={s.id}
                     draggable
                     onDragStart={(e) =>
-                      e.dataTransfer.setData("application/tunnel-server", s.id)
+                      e.dataTransfer.setData(
+                        "application/meshdock-server",
+                        s.id,
+                      )
                     }
                     onClick={() => {
                       setNodes((old) =>
@@ -508,7 +511,7 @@ export function Workspace({
           }}
           onDrop={(e) => {
             e.preventDefault();
-            const id = e.dataTransfer.getData("application/tunnel-server");
+            const id = e.dataTransfer.getData("application/meshdock-server");
             if (!topology.servers.some((s) => s.id === id)) return;
             const position = flow.screenToFlowPosition({
               x: e.clientX,

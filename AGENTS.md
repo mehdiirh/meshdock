@@ -1,12 +1,13 @@
 # MeshDock development contract
 
 - This is an open-source control plane. Never commit production IPs, hostnames, credentials, private keys, database files, logs, or user topology exports. Use RFC 5737 addresses in examples.
+- Use `MESHDOCK_*` configuration, `meshdock-*` managed services, and `/var/lib/meshdock` remote state. GRE interfaces use the short `md` prefix to stay within Linux name limits. This unreleased project does not need aliases for earlier development names.
 - Backend lives in backend/, frontend in frontend/. Keep adapters in backend/app/methods; extend the registry rather than adding method-specific branches to API handlers.
 - `scripts/dev.sh` must force simulation unless `--prod` is explicitly passed, regardless of `.env` or inherited variables. Keep demo and real development databases and encryption keys separate; test both launch modes without contacting servers. Keep `sample.env` and `.env.example` identical and free of secrets.
 - Default tests use simulated SSH and isolated state. Never connect to or change a real server unless the human explicitly authorizes that specific deployment.
 - All mutating topology operations require authentication, optimistic revision checks, audit entries, and durable reconciliation jobs. Coordinates and other presentation changes must not deploy remote resources.
 - Secrets are encrypted at rest and are never returned after creation. Logs, previews, errors, and exports must not reveal secrets. Pin SSH host keys; never auto-trust changes.
-- Own only tm-* units, explicitly namespaced paths/interfaces/firewall chains. Never flush global firewall tables, rewrite default routes, or edit unrelated Xray/Nginx/SSH configuration.
+- Own only meshdock-* units, explicitly namespaced paths/interfaces/firewall chains. Never flush global firewall tables, rewrite default routes, or edit unrelated Xray/Nginx/SSH configuration.
 - Preserve previous generations until health checks pass. Multi-host rollback is coordinated and can require recovery after connectivity loss; do not claim distributed atomicity or exactly-once execution.
 - Cleanup removes owned resources, not unrelated software or packages shared with other applications.
 - Every new API message and UI string needs English and Persian translations. Persian layout is RTL; network addresses and code remain LTR.

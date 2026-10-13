@@ -23,7 +23,7 @@ export function App() {
   const cache = useQueryClient();
   const [section, setSection] = useState("topology");
   const [theme, setTheme] = useState(
-    localStorage.getItem("tm-theme") || "dark",
+    localStorage.getItem("meshdock-theme") || "dark",
   );
   const session = useQuery({
     queryKey: ["session"],
@@ -32,7 +32,7 @@ export function App() {
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("tm-theme", theme);
+    localStorage.setItem("meshdock-theme", theme);
   }, [theme]);
   useEffect(() => {
     if (session.data) setCsrf(session.data.csrf);

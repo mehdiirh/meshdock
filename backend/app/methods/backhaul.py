@@ -34,7 +34,7 @@ class Backhaul(Adapter):
         for plan in (entry, exit):
             plan["binaries"].append("backhaul")
             plan["units"][context.tag + ".service"] = service(
-                f"/var/lib/tunnel-manager/{context.namespace}/bin/backhaul -c {context.root}/{context.filename}.toml"
+                f"/var/lib/meshdock/{context.namespace}/bin/backhaul -c {context.root}/{context.filename}.toml"
             )
         entry["firewall"].append(
             {

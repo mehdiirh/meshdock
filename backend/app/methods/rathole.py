@@ -30,7 +30,7 @@ class Rathole(Adapter):
         for plan in (entry, exit):
             plan["binaries"].append("rathole")
             plan["units"][context.tag + ".service"] = service(
-                f"/var/lib/tunnel-manager/{context.namespace}/bin/rathole {context.root}/{context.filename}.toml"
+                f"/var/lib/meshdock/{context.namespace}/bin/rathole {context.root}/{context.filename}.toml"
             )
         entry["firewall"].append(
             {

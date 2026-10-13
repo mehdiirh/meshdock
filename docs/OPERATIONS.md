@@ -12,10 +12,10 @@ Public ports have no blanket reserved band. Use integer ports or equal-width ran
 
 Owned resources use:
 
-- `/var/lib/tunnel-manager/<namespace>/` for the helper, encrypted-in-transit/owner-only-on-host configuration, binaries, journals and generation files.
-- `tm-<namespace>-*.service` systemd units linked to the current generation.
+- `/var/lib/meshdock/<namespace>/` for the helper, encrypted-in-transit/owner-only-on-host configuration, binaries, journals and generation files.
+- `meshdock-<namespace>-*.service` systemd units linked to the current generation.
 - GRE interfaces with the installation prefix and link slot.
-- One `TM_<NAMESPACE>` INPUT chain and its jump rule. The helper never flushes global firewall tables.
+- One `MESHDOCK_<NAMESPACE>` INPUT chain and its jump rule. The helper never flushes global firewall tables.
 
 No external proxy application, existing SSH configuration, default route or unrelated service is rewritten. Shared dependencies remain installed. A temporary package-start policy is removed in a finally block; after an interrupted install the next helper operation also removes its exact owned policy, preserving any pre-existing host policy. Package installation can update system packages according to the host's configured repositories; use staged hosts and maintenance windows.
 
@@ -26,7 +26,7 @@ No external proxy application, existing SSH configuration, default route or unre
 3. On each managed host, run as root:
 
    ```sh
-   python3 /var/lib/tunnel-manager/INSTALLATION_NAMESPACE/agent.py --uninstall INSTALLATION_NAMESPACE
+   python3 /var/lib/meshdock/INSTALLATION_NAMESPACE/agent.py --uninstall INSTALLATION_NAMESPACE
    ```
 
    Replace the namespace with the value from `GET /api/v1/topology`. This command refuses while the current generation contains services; complete step 1 first. It removes the helper, generation files, private tunnel keys and binaries for this installation. It leaves shared packages and other installations alone.

@@ -55,9 +55,9 @@ class Agent:
         if not re.fullmatch("[a-f0-9]{10}", namespace):
             raise OperationError("preflight_failed")
         self.namespace = namespace
-        self.prefix = "tm-" + namespace + "-"
-        self.root = Path(root or "/var/lib/tunnel-manager/" + namespace)
-        self.chain = "TM_" + namespace.upper()
+        self.prefix = "meshdock-" + namespace + "-"
+        self.root = Path(root or "/var/lib/meshdock/" + namespace)
+        self.chain = "MESHDOCK_" + namespace.upper()
         self.units = Path("/etc/systemd/system")
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
@@ -365,13 +365,12 @@ class Agent:
 
     @property
     def package_policy_text(self):
-        # Stable ownership marker: recovery must recognize policies from older releases.
-        return f"#!/bin/sh\n# Tunnel Manager {self.namespace} temporary policy\nexit 101\n"
+        return f"#!/bin/sh\n# MeshDock {self.namespace} temporary policy\nexit 101\n"
 
     def recover_package_policy(self, policy=None, lock_path=None):
         """Remove this helper's exact orphaned policy after an interrupted install."""
         policy = Path(policy or "/usr/sbin/policy-rc.d")
-        lock_path = Path(lock_path or "/run/tunnel-manager-packages.lock")
+        lock_path = Path(lock_path or "/run/meshdock-packages.lock")
         with lock_path.open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             if policy.is_file() and not policy.is_symlink():
@@ -401,7 +400,7 @@ class Agent:
             # Do not let package post-install hooks start a competing default proxy.
             # Existing host policy is respected. The temporary policy is removed in finally.
             policy = Path("/usr/sbin/policy-rc.d")
-            lock = open("/run/tunnel-manager-packages.lock", "a")
+            lock = open("/run/meshdock-packages.lock", "a")
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 created = not policy.exists() and not policy.is_symlink()
@@ -646,7 +645,7 @@ class Agent:
             raise OperationError("cleanup_first")
         self.switch(None)
         for suffix in ("stats.sock", "haproxy.pid"):
-            Path(f"/run/tm-{self.namespace}-{suffix}").unlink(missing_ok=True)
+            Path(f"/run/meshdock-{self.namespace}-{suffix}").unlink(missing_ok=True)
         shutil.rmtree(self.root)
 
     def commit(self, generation):
