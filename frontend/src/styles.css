@@ -522,6 +522,8 @@ pre {
 }
 .workspace-tools {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
@@ -2245,28 +2247,32 @@ fieldset.field legend {
 .jump-node small {
   color: var(--muted);
 }
-.board-legend {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
+.connection-legend,
+.connection-legend > span {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  background: var(--canvas);
-  color: var(--jump);
+}
+.connection-legend {
+  gap: 14px;
+  color: var(--muted);
   font-size: 11px;
-  pointer-events: none;
-  z-index: 5;
 }
-.jump-line-sample {
-  width: 24px;
-  border-top: 2px dotted var(--jump);
+.connection-legend > span {
+  gap: 6px;
+  white-space: nowrap;
 }
-[dir="rtl"] .jump-node,
-[dir="rtl"] .board-legend {
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.legend-dot.tunnel {
+  background: var(--accent);
+}
+.legend-dot.hop {
+  background: var(--jump);
+}
+[dir="rtl"] .jump-node {
   direction: rtl;
 }
 .jump-node strong {

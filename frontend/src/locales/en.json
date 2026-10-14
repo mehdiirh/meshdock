@@ -377,6 +377,8 @@
     "externalJump": "External SSH jump host",
     "managementOnly": "SSH hop · management access only",
     "jumpDescription": "SSH hop from {{host}} to {{target}}",
-    "oneHop": "MeshDock connects directly to the jump host, then to this server. A saved server’s own jump route is not followed. Reciprocal routes work only when both jump hosts are directly reachable from MeshDock."
+    "oneHop": "MeshDock connects directly to the jump host, then to this server. A saved server’s own jump route is not followed. Reciprocal routes work only when both jump hosts are directly reachable from MeshDock.",
+    "legendTunnel": "Tunnel",
+    "legendHop": "SSH hop"
   }
 }

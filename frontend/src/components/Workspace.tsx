@@ -573,6 +573,18 @@ export function Workspace({
             {t("desired")} r{topology.revision}
           </span>
         </span>
+        {!!visible.jumps.length && (
+          <span className="connection-legend">
+            <span>
+              <i className="legend-dot tunnel" aria-hidden="true" />
+              {t("board.legendTunnel")}
+            </span>
+            <span>
+              <i className="legend-dot hop" aria-hidden="true" />
+              {t("board.legendHop")}
+            </span>
+          </span>
+        )}
         <div>
           <button
             className="icon-button"
@@ -833,12 +845,6 @@ export function Workspace({
               zoomable
             />
           </ReactFlow>
-          {!!visible.jumps.length && (
-            <div className="board-legend">
-              <span className="jump-line-sample" />
-              {t("board.managementOnly")}
-            </div>
-          )}
           {!!topology.pending_removals?.length && (
             <button
               className="removal-banner"
