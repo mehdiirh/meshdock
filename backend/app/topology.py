@@ -259,8 +259,10 @@ def save(db, body, actor):
             ),
         )
     # Compile before committing: switching adapters must validate capacity and bindings.
+    from .board import reveal_required
     from .planner import build
 
     build(desired(db, True))
+    reveal_required(db, desired(db))
     db.execute("UPDATE state SET revision=revision+1 WHERE id=1")
     return {"revision": body.revision + 1, "job_id": enqueue(db, actor)}

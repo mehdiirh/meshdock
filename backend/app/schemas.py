@@ -39,6 +39,11 @@ class Position(Model):
     y: float = Field(ge=-100000, le=100000, allow_inf_nan=False)
 
 
+class BoardVisibility(Revision):
+    hidden: bool
+    position: Position | None = None
+
+
 class Host(Model):
     host: str = Field(min_length=1, max_length=253)
     ssh_port: int = Field(default=22, ge=1, le=65535)

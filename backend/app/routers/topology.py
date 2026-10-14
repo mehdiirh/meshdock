@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from .. import force_removals, removals, topology
+from .. import board, force_removals, removals, topology
 from .. import schemas as models
 from ..db import connect
 from ..security import AppError, require
@@ -16,7 +16,7 @@ def language(request):
 def get_topology(actor=Depends(require("read"))):
     with connect() as db:
         desired = topology.desired(db)
-        return {**desired, **removals.view(db, desired)}
+        return {**desired, **removals.view(db, desired), **board.view(db, desired)}
 
 
 @router.put("/topology")
@@ -130,3 +130,9 @@ def retry_force_cleanup(id: str, body: models.Revision, actor=Depends(require("a
 def skip_force_cleanup(id: str, body: models.Revision, actor=Depends(require("admin"))):
     with connect(True) as db:
         return force_removals.resume(db, id, body.revision, actor, skip=True)
+
+
+@router.patch("/servers/{id}/board")
+def server_board(id: str, body: models.BoardVisibility, actor=Depends(require("write"))):
+    with connect(True) as db:
+        return board.set_visibility(db, id, body, actor)

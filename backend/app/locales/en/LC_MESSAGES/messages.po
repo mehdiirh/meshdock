@@ -317,3 +317,6 @@ msgstr "Server deletion completed with skipped cleanup. Resources may remain on 
 
 msgid "force_delete_complete"
 msgstr "The server and its connections were removed after endpoint cleanup."
+
+msgid "board_server_in_use"
+msgstr "This server has a tunnel or SSH jump connection. Remove those connections and complete any pending cleanup before moving it to inventory."

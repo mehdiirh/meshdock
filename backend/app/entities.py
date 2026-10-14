@@ -66,6 +66,11 @@ class Server(Base):
     created: Mapped[float] = mapped_column(Float)
 
 
+class BoardInventory(Base):
+    __tablename__ = "board_inventory"
+    server_id: Mapped[str] = mapped_column(ForeignKey("servers.id"), primary_key=True)
+
+
 class Link(Base):
     __tablename__ = "links"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
