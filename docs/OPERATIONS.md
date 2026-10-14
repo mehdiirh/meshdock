@@ -107,7 +107,7 @@ Prepare the following:
 
 Select a saved directly reachable server to copy its management details, or enter a custom jump host. Verify its fingerprint independently, then continue to discover and verify the **target's** fingerprint through that path. Authentication checks each host's pinned key before sending that host's credentials. Keys are never copied to the jump server and SSH agent forwarding is not used.
 
-A saved-server choice is a copy of its settings. Later edits or deletion of that inventory card do not change the target's saved jump configuration. Edit affected targets explicitly when rotating the jump host or its credential. Only one intermediate host is supported; chained jump hosts are rejected.
+A saved-server choice is a copy of its settings. Later edits or deletion of that inventory card do not change the target's saved jump configuration. Edit affected targets explicitly when rotating the jump host or its credential. Only one intermediate host is supported; nested jump configuration is rejected. Selecting a saved server copies its direct SSH endpoint and credential, not its own jump route. A → B and B → A can coexist as independent management routes, but MeshDock must be able to reach each jump host directly. Two mutually unreachable hosts cannot bootstrap access through each other.
 
 The API accepts an optional `ssh_jump` object on each server in `PUT /api/v1/topology`, and on `POST /api/v1/servers/discover`:
 
@@ -158,3 +158,14 @@ Admin API calls (username/password session with CSRF, or an admin Bearer API key
 - `POST /api/v1/jobs/{id}/skip-cleanup` explicitly accepts the reported unreachable endpoints. Both action requests require the current revision; skipping is rejected unless every unfinished endpoint was checked and found unreachable.
 
 The operation uses the existing versioned job snapshot and receipt fields with force-deletion metadata version 1. No database schema change or new migration is required.
+
+
+## Board and inventory
+
+**Move to inventory** hides an unused server card without deleting the server. Click its library entry or drag it onto the canvas to restore it. Placement is shared across administrators and persists in an Alembic-managed `board_inventory` table, separate from deployment snapshots. It does not change the topology revision, queue a deployment, contact SSH, or change tunnel status. Concurrent visibility requests are serialized and idempotent; the last valid placement request wins.
+
+`PATCH /api/v1/servers/{id}/board` accepts `{"revision": 7, "hidden": true}`. To restore at a location, send `{"revision": 7, "hidden": false, "position": {"x": 80, "y": 120}}`. This requires write scope and the current topology revision, and is audited. GET topology includes `hidden_server_ids`, `board_locked_server_ids`, and sanitized `jump_connections`; these display fields are not accepted in a topology save.
+
+A server is locked on the board while it has any configured tunnel link (even disabled), an SSH jump relationship, or an applied/in-flight connection needed for cleanup or recovery. The API rejects hiding it with `board_server_in_use`. Adding a connection automatically reveals inventory-only endpoints. Finish removal and cleanup before hiding them.
+
+SSH arrows run **jump host → managed target**, using amber dotted lines and separate handles. They cannot be reconnected as tunnel lines; edit the target's SSH settings to change the access route. External jump hosts are display-only cards, not managed inventory or deployment targets. Matching uses the saved host or public address plus SSH port, case-insensitively with trailing DNS dots normalized. Unrecognized/ambiguous aliases stay external; MeshDock does not perform DNS lookups or assume that two unrelated hostnames identify the same machine. Historical paths still needed by applied or pending work are marked retained. These lines describe configuration, not SSH health.

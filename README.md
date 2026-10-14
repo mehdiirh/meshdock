@@ -156,6 +156,10 @@ For example, users can connect to an entry server in Iran while an exit server i
 4. **Save and follow the deployment.** **Save & deploy** queues the change. MeshDock installs required tunnel packages, writes its managed configuration, starts services, and runs health checks. Open **Deployments** to follow progress.
 5. **Test the actual application.** Connect a client through the entry server and verify traffic. An applied revision confirms deployment checks passed; it is not a continuous uptime or speed measurement.
 
+**Keep unused servers in your library.** Click **Move to inventory** on an unconnected server card to remove it from the board without deleting its saved configuration or credentials. Click the library entry or drag it back onto the board to restore it. These actions persist across reloads and never start a deployment. Servers with tunnel links (including disabled links or unfinished cleanup) or SSH jump relationships stay on the board.
+
+**Read the management paths.** Amber dotted **SSH HOP** arrows show jump-host access separately from tunnel traffic. Both endpoints stay visible. Custom jump hosts outside the inventory get a separate read-only card; retained deployment paths are labelled **retained**. The lines show configured access paths, not live connectivity.
+
 **Cannot reach a server directly?** In its SSH access step, choose **Via jump host**. Select a saved reachable server or enter a custom host, then choose that host's credential and verify both fingerprints. For example, MeshDock can reach a restricted entry server through an older entry server. The jump host must be reachable from MeshDock and permit SSH forwarding to the target. This carries management traffic only; it does not reroute your users' tunnel traffic. See [SSH jump host setup](docs/OPERATIONS.md#ssh-jump-hosts).
 
 Click a line to edit or switch its method. Drag an endpoint to change its destination. Hold **Shift** to select servers, then choose **Connect selected** for batch connections. Moving a card changes only the layout and does not deploy anything.
