@@ -361,5 +361,22 @@
       "skipped": "Cleanup skipped — resources may remain"
     },
     "removed": "Removed {{name}}"
+  },
+  "board": {
+    "hide": "Move to inventory",
+    "hideHint": "Remove this card from the board; keep the server in the inventory.",
+    "locked": "Connected servers and SSH jump endpoints must stay on the board.",
+    "show": "Add to board",
+    "focus": "Focus on board",
+    "inventoryOnly": "Inventory only · click to add",
+    "inventoryHint": "Move unused cards to inventory. Click or drag them onto the board to bring them back.",
+    "hiddenNotice": "Card moved to inventory. No deployment started.",
+    "shownNotice": "Card added to the board. No deployment started.",
+    "jumpLabel": "SSH HOP",
+    "retainedJump": "SSH HOP · retained",
+    "externalJump": "External SSH jump host",
+    "managementOnly": "SSH hop · management access only",
+    "jumpDescription": "SSH hop from {{host}} to {{target}}",
+    "oneHop": "MeshDock connects directly to the jump host, then to this server. A saved server’s own jump route is not followed. Reciprocal routes work only when both jump hosts are directly reachable from MeshDock."
   }
 }

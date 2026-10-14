@@ -2195,3 +2195,87 @@ fieldset.field legend {
 .status-dot.cleanup_skipped {
   background: var(--warning, #c99a48);
 }
+
+/* Management paths have their own ports and visual language. */
+:root {
+  --jump: #e4b76b;
+}
+[data-theme="light"] {
+  --jump: #8b5c15;
+}
+.server-node .node-header .board-hide {
+  margin-inline-start: auto;
+}
+.server-node .node-header .board-hide + button {
+  margin-inline-start: 0;
+}
+.board-hide:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.server-node .jump-handle {
+  width: 6px;
+  height: 6px;
+  background: var(--jump);
+  opacity: 0.6;
+}
+.inventory-only {
+  opacity: 0.8;
+}
+.inventory-only:hover {
+  opacity: 1;
+}
+.jump-node {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 8px;
+  width: 235px;
+  padding: 16px;
+  border: 1px dashed var(--jump);
+  border-radius: 14px;
+  color: var(--jump);
+  background: var(--canvas);
+  font-size: 11px;
+}
+.jump-node strong,
+.jump-node small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+.jump-node small {
+  color: var(--muted);
+}
+.board-legend {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--jump);
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 5;
+}
+.jump-line-sample {
+  width: 24px;
+  border-top: 2px dotted var(--jump);
+}
+[dir="rtl"] .jump-node,
+[dir="rtl"] .board-legend {
+  direction: rtl;
+}
+.jump-node strong {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+[dir="rtl"] .ssh-jump-edge .react-flow__edge-text {
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-anchor: end;
+  font-family: inherit;
+}

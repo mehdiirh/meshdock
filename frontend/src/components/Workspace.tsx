@@ -1,9 +1,5 @@
-import {
-  removeServer,
-  replaceServer,
-  replaceLink,
-  visibleTopology,
-} from "../topology";
+import { boardTopology, jumpSourceId } from "../board";
+import { removeServer, replaceServer, replaceLink } from "../topology";
 import { linkDeploymentStatus, failedDeployment } from "../deployments";
 import { compactPorts } from "../ports";
 import { useCallback, useEffect, useState } from "react";
@@ -41,13 +37,15 @@ import {
 import { api, useTopology, useSaveTopology, useJobs } from "../api";
 import { newId, type Server, type Link, type Topology } from "../types";
 import { ServerNode, type ServerFlowNode } from "./ServerNode";
+import { JumpNode, type JumpFlowNode } from "./JumpNode";
 import { ForceDeleteDialog } from "./ForceDelete";
 import { ServerDialog } from "./ServerDialog";
 import { LinkPanel } from "./LinkPanel";
 import { RemovalPanel } from "./RemovalPanel";
 import { Jobs } from "./Jobs";
 import { Modal, Confirm, Spinner, ErrorMessage } from "./Primitives";
-const nodeTypes = { server: ServerNode };
+type WorkspaceNode = ServerFlowNode | JumpFlowNode;
+const nodeTypes = { server: ServerNode, jump: JumpNode };
 const blankLink = (entry: string, exit: string): Link => ({
   id: newId(),
   entry_id: entry,
@@ -70,8 +68,8 @@ export function Workspace({
   const query = useTopology();
   const jobs = useJobs();
   const save = useSaveTopology();
-  const flow = useReactFlow<ServerFlowNode>();
-  const [nodes, setNodes, onNodesChange] = useNodesState<ServerFlowNode>([]);
+  const flow = useReactFlow<WorkspaceNode>();
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkspaceNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [search, setSearch] = useState("");
   const [forceServer, setForceServer] = useState<Server | null>(null);
@@ -88,8 +86,8 @@ export function Workspace({
   const [planOpen, setPlanOpen] = useState(false);
   const topology = query.data;
   const visible = topology
-    ? visibleTopology(topology)
-    : { servers: [], links: [] };
+    ? boardTopology(topology)
+    : { servers: [], links: [], locked: new Set<string>(), jumps: [] };
   const removal = topology?.pending_removals?.find(
     (item) => item.link.id === selectedRemoval,
   );
@@ -132,10 +130,58 @@ export function Workspace({
       api("/positions", "PATCH", { positions }),
     onSuccess: () => void cache.invalidateQueries({ queryKey: ["topology"] }),
   });
+  const {
+    mutate: placeOnBoard,
+    isPending: boardBusy,
+    error: boardError,
+  } = useMutation({
+    mutationFn: ({
+      id,
+      hidden,
+      position,
+    }: {
+      id: string;
+      hidden: boolean;
+      position?: Server["position"];
+    }) =>
+      api<
+        Pick<
+          Topology,
+          "hidden_server_ids" | "board_locked_server_ids" | "jump_connections"
+        >
+      >(`/servers/${id}/board`, "PATCH", {
+        revision: topology?.revision,
+        hidden,
+        position,
+      }),
+    onSuccess: (result, variables) => {
+      cache.setQueryData<Topology>(["topology"], (old) =>
+        old
+          ? {
+              ...old,
+              ...result,
+              servers: old.servers.map((server) =>
+                server.id === variables.id && variables.position
+                  ? { ...server, position: variables.position }
+                  : server,
+              ),
+            }
+          : old,
+      );
+      void cache.invalidateQueries({ queryKey: ["topology"] });
+      setNotice(
+        t(variables.hidden ? "board.hiddenNotice" : "board.shownNotice"),
+      );
+    },
+    onError: () => {
+      void cache.invalidateQueries({ queryKey: ["topology"] });
+    },
+  });
   useEffect(() => {
     if (!topology) return;
-    setNodes((old) =>
-      visibleTopology(topology).servers.map((server) => ({
+    const board = boardTopology(topology);
+    setNodes((old) => [
+      ...board.servers.map((server): ServerFlowNode => ({
         id: server.id,
         type: "server",
         position: server.position,
@@ -143,6 +189,9 @@ export function Workspace({
         selected: old.find((n) => n.id === server.id)?.selected,
         data: {
           server,
+          boardLocked: board.locked.has(server.id),
+          boardBusy,
+          hide: () => placeOnBoard({ id: server.id, hidden: true }),
           readOnly: !topology.servers.some((s) => s.id === server.id),
           status: (() => {
             const removalStates = (topology.pending_removals || []).filter(
@@ -192,9 +241,23 @@ export function Workspace({
           },
         },
       })),
-    );
-    setEdges(
-      visibleTopology(topology).links.map((l) => {
+      ...Array.from(
+        new Map(
+          board.jumps
+            .filter((jump) => !jump.source_id)
+            .map((jump) => [jumpSourceId(jump), jump]),
+        ).values(),
+      ).map((jump, index): JumpFlowNode => ({
+        id: jumpSourceId(jump),
+        type: "jump",
+        position: { x: -280, y: 60 + index * 180 },
+        draggable: false,
+        selectable: false,
+        data: { host: jump.host, port: jump.ssh_port },
+      })),
+    ]);
+    setEdges([
+      ...board.links.map((l) => {
         const pendingRemoval = topology.pending_removals?.find(
           (item) => item.link.id === l.id,
         );
@@ -218,6 +281,8 @@ export function Workspace({
           id: l.id,
           source: l.entry_id,
           target: l.exit_id,
+          sourceHandle: "tunnel-out",
+          targetHandle: "tunnel-in",
           label:
             l.method.replaceAll("_", " ").toUpperCase() +
             (pendingRemoval
@@ -249,8 +314,44 @@ export function Workspace({
           markerEnd: { type: MarkerType.ArrowClosed, color },
         };
       }),
-    );
-  }, [topology, jobs.data, t, setNodes, setEdges]);
+      ...board.jumps.map((jump, index) => ({
+        id: jump.id,
+        source: jumpSourceId(jump),
+        target: jump.target_id,
+        sourceHandle:
+          jump.source_id && jump.source_id < jump.target_id
+            ? "jump-out-top"
+            : "jump-out",
+        targetHandle:
+          !jump.source_id || jump.source_id < jump.target_id
+            ? "jump-in"
+            : "jump-in-bottom",
+        type: "smoothstep",
+        reconnectable: false,
+        deletable: false,
+        className: "ssh-jump-edge",
+        animated: false,
+        label: t(jump.retained ? "board.retainedJump" : "board.jumpLabel"),
+        ariaLabel: t("board.jumpDescription", {
+          host: `${jump.host}:${jump.ssh_port}`,
+          target: board.servers.find((server) => server.id === jump.target_id)
+            ?.name,
+        }),
+        data: { jumpTarget: jump.target_id, retained: jump.retained },
+        style: {
+          stroke: "var(--jump)",
+          strokeWidth: 2,
+          strokeDasharray: "3 6",
+        },
+        labelStyle: { fill: "var(--jump)", fontSize: 10, fontWeight: 700 },
+        labelBgStyle: { fill: "var(--canvas)" },
+        labelBgPadding: [8, 5] as [number, number],
+        labelBgBorderRadius: 5,
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--jump)" },
+        pathOptions: { offset: 32 + index * 12 },
+      })),
+    ]);
+  }, [topology, jobs.data, t, setNodes, setEdges, placeOnBoard, boardBusy]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
@@ -328,7 +429,7 @@ export function Workspace({
     setNodes((old) =>
       old.map((n) => ({
         ...n,
-        position: updated.find((s) => s.id === n.id)!.position,
+        position: updated.find((s) => s.id === n.id)?.position || n.position,
       })),
     );
     positions.mutate(
@@ -344,7 +445,10 @@ export function Workspace({
   }
   function connectSelection() {
     const selected = nodes
-      .filter((n) => n.selected && !n.data.readOnly)
+      .filter(
+        (n): n is ServerFlowNode =>
+          n.type === "server" && !!n.selected && !n.data.readOnly,
+      )
       .map((n) => n.data.server);
     const pairs = selected
       .filter((s) => s.role !== "exit")
@@ -522,6 +626,7 @@ export function Workspace({
       <ErrorMessage
         error={
           (!serverDialog && !draft ? save.error : null) ||
+          boardError ||
           positions.error ||
           action.error
         }
@@ -564,6 +669,16 @@ export function Workspace({
                 {matches.map((s) => (
                   <button
                     key={s.id}
+                    className={
+                      topology.hidden_server_ids?.includes(s.id)
+                        ? "inventory-only"
+                        : ""
+                    }
+                    title={t(
+                      topology.hidden_server_ids?.includes(s.id)
+                        ? "board.show"
+                        : "board.focus",
+                    )}
                     draggable
                     onDragStart={(e) =>
                       e.dataTransfer.setData(
@@ -572,6 +687,8 @@ export function Workspace({
                       )
                     }
                     onClick={() => {
+                      if (topology.hidden_server_ids?.includes(s.id))
+                        placeOnBoard({ id: s.id, hidden: false });
                       setNodes((old) =>
                         old.map((n) => ({ ...n, selected: n.id === s.id })),
                       );
@@ -588,9 +705,19 @@ export function Workspace({
                     </span>
                     <span>
                       <strong>{s.name}</strong>
-                      <small>{s.region || s.address}</small>
+                      <small>
+                        {topology.hidden_server_ids?.includes(s.id)
+                          ? t("board.inventoryOnly")
+                          : s.region || s.address}
+                      </small>
                     </span>
-                    <span className="drag-dots">⠿</span>
+                    <span className="drag-dots">
+                      {topology.hidden_server_ids?.includes(s.id) ? (
+                        <Plus size={15} />
+                      ) : (
+                        "⠿"
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -603,6 +730,7 @@ export function Workspace({
             <Plus size={15} />
             {t("addServer")}
           </button>
+          <p className="inventory-tip">{t("board.inventoryHint")}</p>
           <p className="inventory-tip">{t("selectionHint")}</p>
         </aside>
         <div
@@ -620,10 +748,7 @@ export function Workspace({
               x: e.clientX,
               y: e.clientY,
             });
-            setNodes((old) =>
-              old.map((n) => (n.id === id ? { ...n, position } : n)),
-            );
-            positions.mutate({ [id]: position });
+            placeOnBoard({ id, hidden: false, position });
           }}
         >
           <ReactFlow
@@ -660,11 +785,18 @@ export function Workspace({
                 b.role !== "entry"
               );
             }}
-            onNodeDoubleClick={(_, node) => node.data.edit()}
+            onNodeDoubleClick={(_, node) => {
+              if (node.type === "server") node.data.edit();
+            }}
             onNodeDragStop={(_, node) =>
+              node.type === "server" &&
               positions.mutate({ [node.id]: node.position })
             }
             onEdgeClick={(_, edge) => {
+              if (edge.data?.jumpTarget) {
+                setNotice(t("board.managementOnly"));
+                return;
+              }
               setBatch([]);
               if (
                 topology.pending_removals?.some(
@@ -701,6 +833,12 @@ export function Workspace({
               zoomable
             />
           </ReactFlow>
+          {!!visible.jumps.length && (
+            <div className="board-legend">
+              <span className="jump-line-sample" />
+              {t("board.managementOnly")}
+            </div>
+          )}
           {!!topology.pending_removals?.length && (
             <button
               className="removal-banner"

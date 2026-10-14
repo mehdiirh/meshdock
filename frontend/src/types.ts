@@ -72,7 +72,18 @@ export interface PendingRemoval {
     | "retrying"
     | "recovery_required";
 }
+export interface JumpConnection {
+  id: string;
+  source_id: string | null;
+  target_id: string;
+  host: string;
+  ssh_port: number;
+  retained: boolean;
+}
 export interface Topology {
+  hidden_server_ids?: string[];
+  board_locked_server_ids?: string[];
+  jump_connections?: JumpConnection[];
   revision: number;
   applied_revision: number;
   pending_removals?: PendingRemoval[];

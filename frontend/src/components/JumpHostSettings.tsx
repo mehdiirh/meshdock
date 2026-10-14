@@ -85,6 +85,7 @@ export function JumpHostSettings({
       {value && (
         <>
           <p className="muted small">{t("sshJump.hint")}</p>
+          <p className="muted small">{t("board.oneHop")}</p>
           <div className="jump-route">
             <span>{t("sshJump.controller")}</span>
             <ArrowRight size={16} />

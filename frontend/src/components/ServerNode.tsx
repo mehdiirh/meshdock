@@ -5,11 +5,20 @@ import {
   ArrowUpFromLine,
   ArrowLeftRight,
   MoreHorizontal,
+  PanelLeftClose,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Server } from "../types";
 export type ServerFlowNode = Node<
-  { server: Server; status: string; edit: () => void; readOnly?: boolean },
+  {
+    server: Server;
+    status: string;
+    edit: () => void;
+    readOnly?: boolean;
+    hide?: () => void;
+    boardLocked?: boolean;
+    boardBusy?: boolean;
+  },
   "server"
 >;
 export const ServerNode = memo(function ServerNode({
@@ -29,16 +38,56 @@ export const ServerNode = memo(function ServerNode({
       className={"server-node " + server.role + (selected ? " selected" : "")}
     >
       <Handle
+        id="tunnel-in"
         type="target"
         position={Position.Left}
         isConnectable={!data.readOnly && server.role !== "entry"}
         className={server.role === "entry" ? "hidden-handle" : ""}
+      />
+      <Handle
+        id="jump-in"
+        type="target"
+        position={Position.Top}
+        isConnectable={false}
+        className="jump-handle"
+      />
+      <Handle
+        id="jump-out"
+        type="source"
+        position={Position.Bottom}
+        isConnectable={false}
+        className="jump-handle"
+      />
+      <Handle
+        id="jump-out-top"
+        type="source"
+        position={Position.Top}
+        isConnectable={false}
+        className="jump-handle"
+      />
+      <Handle
+        id="jump-in-bottom"
+        type="target"
+        position={Position.Bottom}
+        isConnectable={false}
+        className="jump-handle"
       />
       <div className="node-header">
         <div className="node-icon">
           <Icon size={20} />
         </div>
         <span className="node-role">{t(server.role)}</span>
+        {!data.readOnly && (
+          <button
+            className="nodrag icon-button board-hide"
+            onClick={data.hide}
+            disabled={data.boardLocked || data.boardBusy}
+            aria-label={t("board.hide")}
+            title={t(data.boardLocked ? "board.locked" : "board.hideHint")}
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        )}
         <button
           className="nodrag icon-button"
           onClick={data.edit}
@@ -57,6 +106,7 @@ export const ServerNode = memo(function ServerNode({
         <span className="node-protocol">IPv4</span>
       </div>
       <Handle
+        id="tunnel-out"
         type="source"
         position={Position.Right}
         isConnectable={!data.readOnly && server.role !== "exit"}

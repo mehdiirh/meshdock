@@ -843,3 +843,167 @@ test("pending force cleanup survives reload and renders Persian report", async (
     animations: "disabled",
   });
 });
+
+test("moves an unused card to inventory and restores it after reload without deployment", async ({
+  page,
+}) => {
+  const state = {
+    ...structuredClone(topology),
+    links: [],
+    hidden_server_ids: [] as string[],
+    board_locked_server_ids: [],
+    jump_connections: [],
+  };
+  const mutations: string[] = [];
+  await page.route("**/api/v1/topology", (route) =>
+    route.fulfill({ json: state }),
+  );
+  await page.route("**/api/v1/servers/*/board", async (route) => {
+    mutations.push(route.request().method());
+    const id = new URL(route.request().url()).pathname.split("/").at(-2)!;
+    const body = route.request().postDataJSON();
+    expect(body.revision).toBe(1);
+    state.hidden_server_ids = body.hidden
+      ? [...state.hidden_server_ids, id]
+      : state.hidden_server_ids.filter((value) => value !== id);
+    if (body.position)
+      state.servers.find((server) => server.id === id)!.position =
+        body.position;
+    await route.fulfill({
+      json: {
+        hidden_server_ids: state.hidden_server_ids,
+        board_locked_server_ids: [],
+        jump_connections: [],
+      },
+    });
+  });
+  const deployments: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" || request.url().endsWith("/reconcile"))
+      deployments.push(request.url());
+  });
+  await page.reload();
+  const entry = page.locator(`.react-flow__node[data-id="${a}"]`);
+  await entry
+    .getByRole("button", { name: "Move to inventory", exact: true })
+    .click();
+  await expect(entry).toHaveCount(0);
+  await expect(
+    page.locator(".inventory").getByRole("button", { name: /Entry fixture/ }),
+  ).toContainText("Inventory only");
+  await expect(page.getByRole("status")).toHaveText(
+    "Card moved to inventory. No deployment started.",
+  );
+  await page.reload();
+  await expect(entry).toHaveCount(0);
+  await page
+    .locator(".inventory")
+    .getByRole("button", { name: /Entry fixture/ })
+    .click();
+  await expect(entry).toBeVisible();
+  await entry
+    .getByRole("button", { name: "Move to inventory", exact: true })
+    .click();
+  await expect(entry).toHaveCount(0);
+  // Drag restores and persists the drop position in the same presentation request.
+  await page
+    .locator(".inventory")
+    .getByRole("button", { name: /Entry fixture/ })
+    .dragTo(page.locator(".canvas-wrap"), {
+      targetPosition: { x: 180, y: 160 },
+    });
+  await expect(entry).toBeVisible();
+  expect(mutations).toEqual(["PATCH", "PATCH", "PATCH", "PATCH"]);
+  expect(deployments).toEqual([]);
+});
+
+test("renders reciprocal jump routes separately from tunnels and locks both endpoints", async ({
+  page,
+}, testInfo) => {
+  const state = {
+    ...structuredClone(topology),
+    hidden_server_ids: [],
+    board_locked_server_ids: [a, b],
+    jump_connections: [
+      {
+        id: "jump-a-b",
+        source_id: a,
+        target_id: b,
+        host: "192.0.2.10",
+        ssh_port: 22,
+        retained: false,
+      },
+      {
+        id: "jump-b-a",
+        source_id: b,
+        target_id: a,
+        host: "192.0.2.20",
+        ssh_port: 22,
+        retained: false,
+      },
+      {
+        id: "jump-external",
+        source_id: null,
+        target_id: a,
+        host: "jump.example.test",
+        ssh_port: 2222,
+        retained: true,
+      },
+    ],
+  };
+  await page.route("**/api/v1/topology", (route) =>
+    route.fulfill({ json: state }),
+  );
+  await page.reload();
+  await expect(page.locator(".ssh-jump-edge")).toHaveCount(3);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(4);
+  await expect(page.locator(".jump-node")).toContainText(
+    "jump.example.test:2222",
+  );
+  for (const button of await page
+    .getByRole("button", { name: "Move to inventory", exact: true })
+    .all())
+    await expect(button).toBeDisabled();
+  await page.screenshot({
+    path: testInfo.outputPath("jump-board-before-click.png"),
+  });
+  await page
+    .locator(".ssh-jump-edge .react-flow__edge-textwrapper")
+    .first()
+    .click();
+  await expect(page.getByRole("status")).toHaveText(
+    "SSH hop · management access only",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("jump-board-dark.png") });
+  await page
+    .getByRole("button", { name: "Change appearance", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Change language", exact: true })
+    .click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator(".ssh-jump-edge").first()).toContainText("پرش SSH");
+  for (const label of await page
+    .locator(".ssh-jump-edge .react-flow__edge-textwrapper")
+    .all()) {
+    const text = await label.locator("text").boundingBox();
+    const background = await label.locator("rect").boundingBox();
+    expect(text!.x).toBeGreaterThanOrEqual(background!.x - 1);
+    expect(text!.x + text!.width).toBeLessThanOrEqual(
+      background!.x + background!.width + 1,
+    );
+  }
+  await page.screenshot({
+    path: testInfo.outputPath("jump-board-persian-light.png"),
+  });
+});
+
+test("connected cards cannot move to inventory", async ({ page }) => {
+  for (const button of await page
+    .getByRole("button", { name: "Move to inventory", exact: true })
+    .all())
+    await expect(button).toBeDisabled();
+});

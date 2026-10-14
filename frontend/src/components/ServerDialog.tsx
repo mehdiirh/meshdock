@@ -212,7 +212,6 @@ export function ServerDialog({
               servers={(inventory.data?.servers || []).filter(
                 (candidate) =>
                   candidate.id !== value.id &&
-                  !candidate.ssh_jump &&
                   !(
                     candidate.host === value.host &&
                     candidate.ssh_port === value.ssh_port
