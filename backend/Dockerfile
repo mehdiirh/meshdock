@@ -8,7 +8,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini compile_locales.py ./
-RUN uv run --no-sync python compile_locales.py && useradd --system --uid 10001 meshdock && mkdir /data && chown meshdock:meshdock /data
+RUN chmod -R a+rX app alembic alembic.ini compile_locales.py && uv run --no-sync python compile_locales.py && useradd --system --uid 10001 meshdock && mkdir /data && chown meshdock:meshdock /data
 USER meshdock
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
