@@ -110,7 +110,7 @@ export interface MethodInfo {
     native_ranges: boolean;
     max_ports: number;
     max_listener_ports: number;
-    capacity_basis: "kernel" | "system_resources";
+    capacity_basis: "system_resources";
     forwards_per_session?: number | null;
     protocols: string[];
     platforms: string[];

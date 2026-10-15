@@ -112,6 +112,12 @@ export function Workspace({
             start: number;
             end: number;
           }[];
+          socket_ranges: {
+            address: string;
+            protocol: string;
+            start: number;
+            end: number;
+          }[];
         }[]
       >("/preview"),
     enabled: planOpen,
@@ -1007,11 +1013,11 @@ export function Workspace({
                 <pre>{p.files.join("\n") || "—"}</pre>
                 <strong>{t("ports")}</strong>
                 <code>{compactPorts(p.ports) || "—"}</code>
-                {!!p.forwarded_ranges?.length && (
+                {!!p.socket_ranges?.length && (
                   <>
-                    <strong>{t("forwardedRanges")}</strong>
+                    <strong>{t("haproxyRanges")}</strong>
                     <pre>
-                      {p.forwarded_ranges
+                      {p.socket_ranges
                         .map(
                           (range) =>
                             `${range.address} · ${range.protocol.toUpperCase()} · ${range.start}-${range.end}`,

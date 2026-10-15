@@ -185,7 +185,7 @@
   "exclusionHint": "Comma-separated ports or ranges inside the entry range. Remaining target offsets stay unchanged.",
   "mappedPortCount_one": "{{count}} TCP port",
   "mappedPortCount_other": "{{count}} TCP ports",
-  "nativeRangeMode": "Native kernel forwarding · compact range rules",
+  "nativeRangeMode": "HAProxy TCP forwarding · compact port ranges",
   "expandedRangeMode": "Individual transport listeners · capacity checked on the server",
   "mappingPlatform": "Supported hosts: Debian / Ubuntu, systemd, IPv4. Application mappings: TCP.",
   "invalidRange": "Enter a port or an ascending range from 1 to 65535, for example 8000-8099.",
@@ -196,8 +196,8 @@
   "mappingSshConflict": "This range includes the entry server’s SSH port. Exclude it to preserve access.",
   "mappingLimit": "This mapping exceeds this method’s port space ({{max}}). Check the ranges and exceptions.",
   "actualPortConflicts": "No blanket reserved port range. Topology conflicts are checked on save; live server listeners are checked before deployment.",
-  "nativePoolHint": "Native GRE ranges must be exclusive on this entry. Shared-port load balancing is available for individual GRE ports and socket-based methods.",
-  "nativeHealthHint": "Range health checks test the GRE peer, not every destination port. Closed application ports can remain in the range.",
+  "nativePoolHint": "GRE ranges must be exclusive on this entry. Shared-port load balancing is available for individual GRE ports and other methods.",
+  "nativeHealthHint": "Checks verify the GRE peer and every HAProxy listener, not every destination service. Large ranges need enough file descriptors and explicit exclusions for outgoing ports.",
   "forwardedRanges": "Kernel-forwarded ranges",
   "socketCapacityHint": "Each mapped port needs a public listener and a private transport listener. Large ranges use more memory and file descriptors; they do not guarantee more speed.",
   "sshSessionCount_one": "{{count}} SSH session · up to {{size}} forwards per session",
@@ -380,5 +380,6 @@
     "oneHop": "MeshDock connects directly to the jump host, then to this server. A saved server’s own jump route is not followed. Reciprocal routes work only when both jump hosts are directly reachable from MeshDock.",
     "legendTunnel": "Tunnel",
     "legendHop": "SSH hop"
-  }
+  },
+  "haproxyRanges": "HAProxy listener ranges"
 }

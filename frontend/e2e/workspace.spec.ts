@@ -112,6 +112,14 @@ test("preserves full ranges and exceptions when switching methods", async ({
   await expect(
     page.getByText("64510 TCP ports", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByText("HAProxy TCP forwarding · compact port ranges", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Large ranges need enough file descriptors/),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Rathole", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(
@@ -1006,4 +1014,40 @@ test("connected cards cannot move to inventory", async ({ page }) => {
     .getByRole("button", { name: "Move to inventory", exact: true })
     .all())
     await expect(button).toBeDisabled();
+});
+
+test("previews HAProxy listener ranges and resource counts", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/preview", (route) =>
+    route.fulfill({
+      json: [
+        {
+          server_id: a,
+          units: ["meshdock-fixture-router.service"],
+          files: ["haproxy.cfg"],
+          ports: [],
+          udp_ports: [],
+          forwarded_ranges: [],
+          socket_ranges: [
+            { address: "192.0.2.10", protocol: "tcp", start: 1023, end: 2221 },
+            { address: "192.0.2.10", protocol: "tcp", start: 2223, end: 65535 },
+          ],
+          resources: {
+            listeners: 64512,
+            nofile: 262144,
+            descriptor_budget: 197632,
+          },
+        },
+      ],
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Deployment plan", exact: true })
+    .click();
+  await expect(
+    page.getByText("HAProxy listener ranges", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/192\.0\.2\.10 · TCP · 1023-2221/)).toBeVisible();
+  await expect(page.getByText(/64512/)).toBeVisible();
 });
