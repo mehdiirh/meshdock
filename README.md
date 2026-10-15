@@ -41,7 +41,7 @@ In **real mode**, saving a connection queues a deployment. MeshDock connects ove
 | **Tunnel software** | Downloads and verifies required Backhaul, Rathole, FRP, or Hysteria binaries for the selected method. Installs supporting packages, including OpenSSH tools for reverse SSH. |
 | **GRE** | Uses Linux's GRE support to create and configure tunnel interfaces, addresses, MTU, and the forwarding setup. GRE is a kernel feature, rather than a separate downloaded tunnel program. |
 | **Dependencies and helper** | Installs required system packages and a small remote helper. Configures its own HAProxy services where the selected mapping needs proxy listeners or traffic distribution. |
-| **Server-side networking** | Adds and manages its own firewall chains and rules inside the servers. Configures listeners, port forwarding, and NAT/forwarding rules where the method requires them. |
+| **Server-side networking** | Adds and manages its own firewall chains and rules inside the servers. Allows the selected transport and managed listeners. TCP port forwarding uses HAProxy, including GRE ranges; new GRE plans do not create DNAT/SNAT or packet-forwarding rules. |
 | **Service lifecycle** | Creates and starts managed systemd services, applies connection and method changes, records deployment events, checks activation, and attempts rollback if deployment fails. |
 | **Cleanup** | Removes its managed tunnel services, interfaces, and firewall rules when requested. Shared packages and recovery files are retained; see [full removal](docs/OPERATIONS.md#cleanup-and-full-removal). |
 
@@ -168,9 +168,11 @@ Click a line to edit or switch its method. Drag an endpoint to change its destin
 
 Map a single port (`443 → 8443`) or equal-width ranges (`8000-8099 → 9000-9099`). Exceptions refer to **entry ports** and preserve each remaining port's destination offset.
 
-There is no blanket reserved port band. Exclude your actual conflicting management or service ports, or choose a different transport control port. GRE ranges use kernel forwarding. Other methods create listeners and are subject to descriptor limits, available ports, memory, and connection capacity.
+There is no blanket reserved port band. Exclude your actual conflicting management or service ports, or choose a different transport control port. GRE ranges use compact HAProxy configuration. All methods create listeners and are subject to descriptor limits, available ports, memory, and connection capacity. Broad ranges may need explicit exceptions within the server’s outgoing ephemeral port range.
 
-For socket-based connections, a shared entry port can distribute traffic across several exits using **Round robin**, **Fewest connections**, or **Failover**. Native GRE ranges require exclusive entry intervals. See [port mapping behavior and limits](docs/PORT-MAPPINGS.md) before using broad ranges or shared ports.
+**Upgrading an existing GRE deployment:** the next reconciliation replaces MeshDock-owned NAT forwarding with HAProxy on both endpoints, even when mappings are unchanged. The previous remote generation remains available for rollback. Expect active connections to be interrupted. An independently installed HAProxy or other service occupying a required port is reported as a conflict; MeshDock does not take it over or stop it automatically.
+
+For socket-based connections, a shared entry port can distribute traffic across several exits using **Round robin**, **Fewest connections**, or **Failover**. GRE ranges require exclusive entry intervals. See [port mapping behavior and limits](docs/PORT-MAPPINGS.md) before using broad ranges or shared ports.
 
 ## Supported tunnel methods
 
@@ -178,7 +180,7 @@ All current adapters forward **TCP application traffic**. The transport itself m
 
 | Method | Transport | Encryption | Main requirement |
 | --- | --- | --- | --- |
-| **GRE** | IP protocol 47 | No | GRE must be permitted between public IPv4 endpoints; supports compact kernel forwarding for ranges. |
+| **GRE** | IP protocol 47 | No | GRE must be permitted between public IPv4 endpoints; uses HAProxy for TCP forwarding, including compact port ranges. |
 | **Backhaul** | TCP / TCPMUX / WS / WSS / WSMUX / WSSMUX | WSS modes | Exit initiates TCP connections to entry. MeshDock verifies TLS for WSS/WSSMUX. |
 | **Rathole** | TCP / Noise / TLS / WS / WSS | Noise and TLS modes | WS/WSS require x86_64 with the pinned release; other choices also work on ARM64. |
 | **Reverse SSH** | SSH over TCP | Yes | Exit can reach the managed SSH listener on entry. |
@@ -193,7 +195,7 @@ Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No
 
 - **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443** for Caddy.
 - **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller (directly or through an SSH jump host), and public IPv4 transport addresses.
-- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall and forwarding rules inside the servers. Management SSH must be reachable directly from the controller or through a configured SSH jump host, even if it is blocked between tunnel peers.
+- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall access rules and HAProxy forwarding inside the servers. Management SSH must be reachable directly from the controller or through a configured SSH jump host, even if it is blocked between tunnel peers.
 - **Destination application:** Have Xray/3x-ui, your web server, or another TCP application running at the destination host and port. You do not need to preinstall the tunnel software; MeshDock installs and configures that during deployment.
 
 On a **fresh checkout with no `.env`**, replace the example domain and run:
