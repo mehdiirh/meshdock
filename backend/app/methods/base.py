@@ -133,6 +133,9 @@ class Adapter:
     def compact_mapping(self, link):
         return False
 
+    def allocate_compact(self, link, unavailable):
+        """Optional compact relay allocation, using known endpoint TCP consumers."""
+
     def validate_mappings(self, link):
         if not self.compact_mapping(link) and count(link["ports"]) > self.max_expanded_ports:
             raise AppError(

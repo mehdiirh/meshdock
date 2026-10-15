@@ -80,6 +80,19 @@ def allocate(snapshot):
         adapter = REGISTRY[link["method"]]
         if adapter.compact_mapping(link):
             link["internal_ports"] = []
+            server = link["exit_id"] if adapter.internal_on_exit else link["entry_id"]
+            unavailable = {servers[server]["ssh_port"]}
+            for (target_server, _), intervals in targets.items():
+                if target_server == server:
+                    for first, last in intervals:
+                        unavailable.update(range(first, last + 1))
+            for mapping in public[server]:
+                for first, last, _, _ in segments(mapping):
+                    unavailable.update(range(first, last + 1))
+            unavailable.update(
+                port for host, protocol, port in occupied if host == server and protocol == "tcp"
+            )
+            adapter.allocate_compact(link, unavailable)
             continue
         link["range_mapping"] = any(
             bounds(mapping["public"])[0] != bounds(mapping["public"])[1] or mapping.get("exclude")

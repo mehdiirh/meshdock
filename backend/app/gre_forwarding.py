@@ -4,43 +4,74 @@ from .ports import segments
 from .security import AppError
 
 
+def relay_offset(link, unavailable):
+    """Keep relay ports away from destinations that may listen on all addresses.
+
+    A single offset preserves compact ranges and their exceptions. If a broad
+    mapping cannot fit another contiguous span, retain the original ports and
+    let actual listener preflight decide whether that binding is safe.
+    """
+    intervals = [segment for mapping in link["ports"] for segment in segments(mapping)]
+    if not intervals or not any(
+        port in unavailable for first, last, _, _ in intervals for port in range(first, last + 1)
+    ):
+        return 0
+    first = min(segment[0] for segment in intervals)
+    width = max(segment[1] for segment in intervals) - first + 1
+    run = 0
+    candidates = []
+    for port in range(1, 65536):
+        run = 0 if port in unavailable else run + 1
+        if run >= width:
+            candidates.append(port - width + 1)
+    if not candidates:
+        return 0
+    start = next((port for port in candidates if port >= 30000), candidates[0])
+    return start - first
+
+
 def configure_ranges(context, entry, exit, interface, local_ip, peer_ip):
     for plan, source in ((entry, peer_ip), (exit, local_ip)):
         plan["firewall"].append({"protocol": "icmp", "source": source, "interface": interface})
         plan["gre_checks"].append({"interface": interface, "peer": source})
 
+    shift = context.link.get("relay_port_offset", 0)
     intervals = [segment for mapping in context.link["ports"] for segment in segments(mapping)]
     for index, mapping in enumerate(context.link["ports"]):
         for part, (start, end, target, target_end) in enumerate(segments(mapping)):
             # A destination on our own relay would loop instead of reaching an app.
             if mapping["host"] == peer_ip and any(
-                max(target, first) <= min(target_end, last) for first, last, _, _ in intervals
+                max(target, first + shift) <= min(target_end, last + shift)
+                for first, last, _, _ in intervals
             ):
                 raise AppError("range_target_conflict")
             name = f"gre_{context.link['slot']}_{index}_{part}"
-            for plan, address, host, offset, source in (
-                (entry, context.entry["address"], peer_ip, 0, local_ip),
-                (exit, peer_ip, mapping["host"], target - start, None),
+            for plan, address, host, offset, source, bind_shift in (
+                (entry, context.entry["address"], peer_ip, shift, local_ip, 0),
+                (exit, peer_ip, mapping["host"], target - start - shift, None, shift),
             ):
+                bind_start, bind_end = start + bind_shift, end + bind_shift
                 plan["proxy_ranges"].append(
                     {
                         "name": name,
                         "address": address,
-                        "start": start,
-                        "end": end,
+                        "start": bind_start,
+                        "end": bind_end,
                         "host": host,
                         "offset": offset,
                         "source": source,
                     }
                 )
                 plan["socket_ranges"].append(
-                    {"address": address, "protocol": "tcp", "start": start, "end": end}
+                    {"address": address, "protocol": "tcp", "start": bind_start, "end": bind_end}
                 )
                 rule = {
                     "protocol": "tcp",
                     "source": "0.0.0.0/0" if plan is entry else local_ip,
                     "destination": address,
-                    "port": str(start) if start == end else f"{start}:{end}",
+                    "port": (
+                        str(bind_start) if bind_start == bind_end else f"{bind_start}:{bind_end}"
+                    ),
                 }
                 if plan is exit:
                     rule["interface"] = interface

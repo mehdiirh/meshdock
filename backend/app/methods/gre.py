@@ -1,6 +1,6 @@
 from ipaddress import IPv4Address
 
-from ..gre_forwarding import configure_ranges
+from ..gre_forwarding import configure_ranges, relay_offset
 from ..ports import bounds
 from .base import Adapter, service
 from .options import Options, option
@@ -13,7 +13,7 @@ class GREOptions(Options):
 
 
 class GRE(Adapter):
-    plan_version = 2
+    plan_version = 3
     options_model = GREOptions
     control_protocol = None
     native_ranges = True
@@ -27,6 +27,9 @@ class GRE(Adapter):
             bounds(p["public"])[0] != bounds(p["public"])[1] or p.get("exclude")
             for p in link["ports"]
         )
+
+    def allocate_compact(self, link, unavailable):
+        link["relay_port_offset"] = relay_offset(link, unavailable)
 
     metadata = {
         "id": "gre",

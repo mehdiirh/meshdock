@@ -75,14 +75,14 @@ def helper(net, ns, body):
     return inside(ns, sys.executable, "-c", code)
 
 
-def echo(net, ns, port):
+def echo(net, ns, port, address="127.0.0.1"):
     code = f"""import socketserver
 class Echo(socketserver.BaseRequestHandler):
     def handle(self):
         self.request.sendall(self.request.recv(1024))
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
-Server(('127.0.0.1', {port}), Echo).serve_forever()
+Server(({address!r}, {port}), Echo).serve_forever()
 """
     process = subprocess.Popen(["ip", "netns", "exec", ns, sys.executable, "-c", code])
     net.processes.append(process)
@@ -293,3 +293,23 @@ def test_legacy_nat_upgrade_and_rollback_restore_real_traffic(network):
                 inside(net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/forwarding").stdout
                 == before
             )
+
+
+def test_gre_relay_coexists_with_wildcard_destination_and_rolls_back(network):
+    net = network
+    mapping = {
+        "public": "18000-18002",
+        "target": "18000-18002",
+        "host": "127.0.0.1",
+        "exclude": [18001],
+    }
+    for port in (18000, 18002):
+        echo(net, net.exit, port, "0.0.0.0")
+    for generation, legacy in (("a", True), ("b", False), ("c", True), ("d", False)):
+        activate(net, mapping, generation * 32, legacy=legacy)
+        for port in (18000, 18002):
+            request(net, port)
+        request(net, 18001, succeeds=False)
+        listeners = inside(net.exit, "ss", "-H", "-ltn").stdout
+        assert "0.0.0.0:18000" in listeners
+        assert ("10.253.0.6:30000" in listeners) == (not legacy)

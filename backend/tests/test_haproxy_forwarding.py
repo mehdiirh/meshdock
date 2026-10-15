@@ -194,3 +194,37 @@ def test_nat_upgrade_activation_failure_restores_saved_manifest_and_retries(
     agent.switch(None)
     assert agent.current() is None
     assert ["systemctl", "stop", router] in commands
+
+
+def test_compact_relay_avoids_destination_ports_without_changing_public_intent(admin):
+    from app.allocation import allocate
+
+    snapshot = range_snapshot(admin)
+    original = copy.deepcopy(snapshot)
+    link = allocate(snapshot)[0]
+    assert link["relay_port_offset"] == 12000
+    address = f"10.253.0.{link['slot'] * 4 + 2}"
+    plans = build(snapshot)
+    entry, exit = plans[link["entry_id"]], plans[link["exit_id"]]
+    assert f"server target {address}:+12000" in entry["files"]["haproxy.cfg"]
+    assert f"bind {address}:30000" in exit["files"]["haproxy.cfg"]
+    assert f"bind {address}:30002" in exit["files"]["haproxy.cfg"]
+    assert "server target 127.0.0.1:-12000" in exit["files"]["haproxy.cfg"]
+    assert [r["start"] for r in exit["socket_ranges"]] == [30000, 30002]
+    assert snapshot == original
+
+
+def test_compact_relay_keeps_large_ranges_bounded_and_allocation_linear():
+    from app.gre_forwarding import relay_offset
+
+    def link(first, last):
+        return {
+            "ports": [
+                {"public": f"{first}-{last}", "target": f"{first}-{last}", "host": "127.0.0.1"}
+            ]
+        }
+
+    assert relay_offset(link(1023, 8085), set(range(1023, 8086))) == 28977
+    assert relay_offset(link(1023, 65535), set(range(1023, 65536))) == 0
+    assert relay_offset(link(65530, 65535), set(range(65530, 65536))) == -35530
+    assert relay_offset(link(30000, 30002), {30000, 30001, 30002, 30003}) == 4
