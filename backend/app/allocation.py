@@ -78,7 +78,7 @@ def allocate(snapshot):
     internal = defaultdict(set)
     for link in links:
         adapter = REGISTRY[link["method"]]
-        if adapter.kernel_mapping(link):
+        if adapter.compact_mapping(link):
             link["internal_ports"] = []
             continue
         link["range_mapping"] = any(

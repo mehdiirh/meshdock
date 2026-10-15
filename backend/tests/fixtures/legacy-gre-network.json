@@ -1,0 +1,110 @@
+[
+  {
+    "network_rules": {
+      "pre": [
+        "-d 192.0.2.1 -p tcp --dport 18000 -j DNAT --to-destination 10.253.0.6",
+        "-d 192.0.2.1 -p tcp --dport 18002 -j DNAT --to-destination 10.253.0.6"
+      ],
+      "post": [
+        "-o mdaaaaaa1 -d 10.253.0.6 -p tcp --dport 18000 -j SNAT --to-source 10.253.0.5",
+        "-o mdaaaaaa1 -d 10.253.0.6 -p tcp --dport 18002 -j SNAT --to-source 10.253.0.5"
+      ],
+      "forward": [
+        "-o mdaaaaaa1 -d 10.253.0.6 -p tcp --dport 18000 -j ACCEPT",
+        "-o mdaaaaaa1 -d 10.253.0.6 -p tcp --dport 18002 -j ACCEPT",
+        "-i mdaaaaaa1 -s 10.253.0.6 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
+      ],
+      "mss": [
+        "-i mdaaaaaa1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        "-o mdaaaaaa1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+      ]
+    },
+    "network_interfaces": [
+      "mdaaaaaa1"
+    ],
+    "forwarding_addresses": [
+      "192.0.2.1"
+    ],
+    "loopback_interfaces": [],
+    "gre_checks": [
+      {
+        "interface": "mdaaaaaa1",
+        "peer": "10.253.0.6"
+      }
+    ],
+    "firewall": [
+      {
+        "protocol": "icmp",
+        "source": "10.253.0.6",
+        "interface": "mdaaaaaa1"
+      }
+    ],
+    "forwarded_ranges": [
+      {
+        "address": "192.0.2.1",
+        "protocol": "tcp",
+        "start": 18000,
+        "end": 18000
+      },
+      {
+        "address": "192.0.2.1",
+        "protocol": "tcp",
+        "start": 18002,
+        "end": 18002
+      }
+    ],
+    "shifted_ranges": false
+  },
+  {
+    "network_rules": {
+      "pre": [
+        "-i mdaaaaaa1 -s 10.253.0.5 -d 10.253.0.6 -p tcp --dport 18000 -j DNAT --to-destination 127.0.0.1",
+        "-i mdaaaaaa1 -s 10.253.0.5 -d 10.253.0.6 -p tcp --dport 18002 -j DNAT --to-destination 127.0.0.1"
+      ],
+      "post": [],
+      "forward": [
+        "-o mdaaaaaa1 -d 10.253.0.5 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
+      ],
+      "mss": [
+        "-i mdaaaaaa1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        "-o mdaaaaaa1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+      ]
+    },
+    "network_interfaces": [
+      "mdaaaaaa1"
+    ],
+    "forwarding_addresses": [],
+    "loopback_interfaces": [
+      "mdaaaaaa1"
+    ],
+    "gre_checks": [
+      {
+        "interface": "mdaaaaaa1",
+        "peer": "10.253.0.5"
+      }
+    ],
+    "firewall": [
+      {
+        "protocol": "icmp",
+        "source": "10.253.0.5",
+        "interface": "mdaaaaaa1"
+      },
+      {
+        "protocol": "tcp",
+        "source": "10.253.0.5",
+        "interface": "mdaaaaaa1",
+        "destination": "127.0.0.1",
+        "port": "18000"
+      },
+      {
+        "protocol": "tcp",
+        "source": "10.253.0.5",
+        "interface": "mdaaaaaa1",
+        "destination": "127.0.0.1",
+        "port": "18002"
+      }
+    ],
+    "forwarded_ranges": [],
+    "shifted_ranges": false
+  }
+]

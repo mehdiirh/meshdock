@@ -24,7 +24,8 @@ def affected_links(previous, desired):
                 }
                 for side in ("entry_id", "exit_id")
             ]
-            result[link["id"]] = link, endpoints
+            version = snapshot.get("method_versions", {}).get(link["method"], 1)
+            result[link["id"]] = link, endpoints, version
         return result
 
     old, new = signatures(previous), signatures(desired)

@@ -94,9 +94,9 @@ def test_shared_entry_preserves_unchanged_gre_during_apply_and_rollback(
         atomic_json(third / "manifest.json", updated)
         commands.clear()
         agent.switch(third)
-        assert ["network_down"] in commands
+        assert ["network_down"] not in commands
         assert any(
-            cmd[:2] == ["systemctl", "start"] and cmd[-1].endswith("-network.service")
+            cmd[:2] == ["systemctl", "start"] and cmd[-1].endswith("-router.service")
             for cmd in commands
         )
 

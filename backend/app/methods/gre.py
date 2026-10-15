@@ -1,8 +1,7 @@
 from ipaddress import IPv4Address
 
 from ..gre_forwarding import configure_ranges
-from ..ports import bounds, segments
-from ..security import AppError
+from ..ports import bounds
 from .base import Adapter, service
 from .options import Options, option
 
@@ -14,6 +13,7 @@ class GREOptions(Options):
 
 
 class GRE(Adapter):
+    plan_version = 2
     options_model = GREOptions
     control_protocol = None
     native_ranges = True
@@ -22,7 +22,7 @@ class GRE(Adapter):
     def internal_address(self, link):
         return str(IPv4Address(int(IPv4Address("10.253.0.0")) + link["slot"] * 4 + 2))
 
-    def kernel_mapping(self, link):
+    def compact_mapping(self, link):
         return any(
             bounds(p["public"])[0] != bounds(p["public"])[1] or p.get("exclude")
             for p in link["ports"]
@@ -36,20 +36,6 @@ class GRE(Adapter):
         "protocols": ["tcp"],
         "requirements": ["protocol-47", "public-ipv4"],
     }
-
-    def validate_mappings(self, link):
-        super().validate_mappings(link)
-        if not self.kernel_mapping(link):
-            return
-        targets = []
-        for mapping in link["ports"]:
-            for _, _, first, last in segments(mapping):
-                if any(
-                    host != mapping["host"] and max(first, start) <= min(last, end)
-                    for start, end, host in targets
-                ):
-                    raise AppError("range_target_conflict")
-                targets.append((first, last, mapping["host"]))
 
     def bindings(self, context, entry, exit):
         ip_b = str(IPv4Address(int(IPv4Address("10.253.0.0")) + context.link["slot"] * 4 + 2))
@@ -86,7 +72,7 @@ esac
             )
             plan["interfaces"].append({"name": iface, "network": str(IPv4Address(first)) + "/30"})
             plan["firewall"].append({"protocol": "gre", "source": peer["address"]})
-        if self.kernel_mapping(context.link):
+        if self.compact_mapping(context.link):
             configure_ranges(context, entry, exit, iface, ip_a, ip_b)
             return
         for index, port in enumerate(context.link["ports"]):

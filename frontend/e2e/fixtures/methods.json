@@ -340,7 +340,7 @@
       "native_ranges": true,
       "max_ports": 65535,
       "max_listener_ports": 65535,
-      "capacity_basis": "kernel",
+      "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
         "tcp"

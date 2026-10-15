@@ -299,9 +299,9 @@ def test_agent_removal_and_rollback_restore_units_and_network_state(
     assert all(["systemctl", "start", unit] in commands for unit in plan["units"])
     assert ["firewall", plan["firewall"]] in commands
     if native:
-        assert ["network_down"] in commands
+        assert ["network_down"] not in commands
         assert any(
-            command[:2] == ["systemctl", "start"] and command[-1].endswith("-network.service")
+            command[:2] == ["systemctl", "start"] and command[-1].endswith("-router.service")
             for command in commands
         )
     commands.clear()

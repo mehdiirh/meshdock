@@ -199,7 +199,8 @@ def test_reverse_ssh_4097_listeners_and_both_session_boundaries(tmp_path, monkey
             echo.server_close()
 
 
-def test_socket_listeners_can_exhaust_outgoing_source_ports():
+@pytest.mark.parametrize("bind_address", ["127.0.0.1", "127.0.0.3"])
+def test_socket_listeners_can_exhaust_outgoing_source_ports(bind_address):
     namespace = f"meshdock-egress-{os.getpid()}"
     subprocess.run(["ip", "netns", "add", namespace], check=True, capture_output=True)
     try:
@@ -215,7 +216,7 @@ import errno, socket
 listeners = []
 for port in range(40000, 40004):
     listener = socket.socket()
-    listener.bind(("127.0.0.1", port))
+    listener.bind((BIND_ADDRESS, port))
     listener.listen()
     listeners.append(listener)
 target = socket.socket()
@@ -232,7 +233,9 @@ with socket.create_connection(("127.0.0.2", 1234), timeout=1):
     pass
 """
         result = subprocess.run(
-            prefix + [sys.executable, "-c", script], capture_output=True, timeout=10
+            prefix + [sys.executable, "-c", script.replace("BIND_ADDRESS", repr(bind_address))],
+            capture_output=True,
+            timeout=10,
         )
         assert result.returncode == 0, result.stderr.decode()
     finally:

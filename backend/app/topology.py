@@ -66,6 +66,11 @@ def desired(db, private=False):
         "revision": state["revision"],
         "applied_revision": state["applied_revision"],
         "namespace": state["namespace"],
+        **(
+            {"method_versions": {key: adapter.plan_version for key, adapter in REGISTRY.items()}}
+            if private
+            else {}
+        ),
         "servers": servers,
         "links": links,
     }
@@ -106,13 +111,13 @@ def validate(db, body):
         if not link.enabled:
             continue
         graph.setdefault(a.id, set()).add(b.id)
-        native = adapter.kernel_mapping(link.model_dump())
+        native = adapter.compact_mapping(link.model_dump())
         for mapping in mappings:
             if contains(mapping, a.ssh_port):
                 raise AppError("ssh_port_conflict")
-            for other, policy, kernel in ports.get(a.id, []):
+            for other, policy, compact in ports.get(a.id, []):
                 if overlaps(mapping, other):
-                    if kernel or native:
+                    if compact or native:
                         raise AppError("range_pool_conflict")
                     if policy != link.policy:
                         raise AppError("pool_policy")

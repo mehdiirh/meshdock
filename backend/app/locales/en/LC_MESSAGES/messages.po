@@ -162,7 +162,7 @@ msgstr "The mapping includes the entry server’s SSH port. Add it to the explic
 
 msgid "range_pool_conflict"
 msgstr ""
-"A native GRE range overlaps another connection on this entry. Use disjoint ranges or explicit "
+"A GRE range overlaps another connection on this entry. Use disjoint ranges or explicit "
 "exceptions."
 
 msgid "port_capacity"
@@ -180,7 +180,7 @@ msgstr ""
 "port. Conflict details follow."
 
 msgid "range_target_conflict"
-msgstr "GRE target ranges overlap for different destination hosts on the same connection."
+msgstr "The GRE destination would loop back into its own forwarding listener."
 
 msgid "descriptor_capacity"
 msgstr ""
@@ -188,10 +188,7 @@ msgstr ""
 "available capacity."
 
 msgid "outgoing_port_capacity"
-msgstr ""
-"The mapping occupies all automatic outgoing TCP ports on this server’s egress address. Add "
-"explicit exceptions within the reported range, use a separate ingress address, or choose kernel "
-"forwarding."
+msgstr "The planned listeners occupy all automatic outgoing TCP ports. Add explicit exceptions within the reported range on this server. A different listener IP alone may not free outgoing ports."
 
 msgid "invalid_method_settings"
 msgstr "Invalid method settings. Check supported options, limits, and dependencies."

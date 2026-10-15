@@ -58,16 +58,24 @@ def targets(previous, desired):
         Target(server, plans[server["id"]]).identity: Target(server, plans[server["id"]])
         for server in desired["servers"]
     }
+    upgraded_servers = set()
+    for link in desired.get("links", []):
+        method = link["method"]
+        if link["enabled"] and previous.get("method_versions", {}).get(method, 1) != desired.get(
+            "method_versions", {}
+        ).get(method, 1):
+            upgraded_servers.update((link["entry_id"], link["exit_id"]))
     result = []
     for identity, target in old.items():
         if identity not in current and target.plan["units"]:
             cleanup = empty()
             cleanup.pop("backends")
             cleanup.pop("relay")
+            cleanup.pop("proxy_ranges")
             result.append(Target(target.server, cleanup))
     for identity, target in current.items():
         before = old.get(identity)
-        if before and before.plan == target.plan:
+        if before and before.plan == target.plan and target.server["id"] not in upgraded_servers:
             continue
         if target.plan["units"] or (before and before.plan["units"]):
             result.append(target)

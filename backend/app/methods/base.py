@@ -70,6 +70,7 @@ WantedBy=multi-user.target
 
 class Adapter:
     metadata: dict
+    plan_version = 1
     options_model = Options
 
     def options(self, link):
@@ -118,7 +119,7 @@ class Adapter:
             "native_ranges": self.native_ranges,
             "max_ports": 65535 if self.native_ranges else self.max_expanded_ports,
             "max_listener_ports": self.max_expanded_ports,
-            "capacity_basis": "kernel" if self.native_ranges else "system_resources",
+            "capacity_basis": "system_resources",
             "forwards_per_session": self.forwards_per_session,
             "protocols": self.metadata["protocols"],
             "platforms": ["debian", "ubuntu"],
@@ -129,11 +130,11 @@ class Adapter:
         # listener space without changing interfaces or claiming application ports.
         return f"127.77.{link['slot'] // 256}.{link['slot'] % 256}"
 
-    def kernel_mapping(self, link):
+    def compact_mapping(self, link):
         return False
 
     def validate_mappings(self, link):
-        if not self.kernel_mapping(link) and count(link["ports"]) > self.max_expanded_ports:
+        if not self.compact_mapping(link) and count(link["ports"]) > self.max_expanded_ports:
             raise AppError(
                 "mapping_limit",
                 details={"limit": self.max_expanded_ports, "method": self.metadata["id"]},

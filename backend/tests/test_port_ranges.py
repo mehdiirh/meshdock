@@ -76,12 +76,13 @@ def test_all_adapters_compile_ranges_with_exceptions(admin, method):
     entry, exit = plans[link["entry_id"]], plans[link["exit_id"]]
     assert admin.get("/api/v1/topology").json()["links"][0]["ports"] == link["ports"]
     if method == "gre":
-        rules = "\n".join(entry["network_rules"]["pre"])
-        assert "--dport 30000:30003" in rules
-        assert ":40000-40003/30000" in rules
-        assert ":40005-40009/30005" in rules
-        assert entry["shifted_ranges"]
-        assert not entry["sockets"]
+        assert "bind 192.0.2.10:30000-30003" in entry["files"]["haproxy.cfg"]
+        assert "bind 192.0.2.10:30005-30009" in entry["files"]["haproxy.cfg"]
+        assert "server target 127.0.0.1:+10000" in exit["files"]["haproxy.cfg"]
+        assert all(not rules for plan in (entry, exit) for rules in plan["network_rules"].values())
+        assert not entry["shifted_ranges"]
+        assert entry["resources"]["listeners"] == 17
+        assert exit["resources"]["listeners"] == 17
         assert not exit["checks"]
     else:
         public = [
@@ -117,7 +118,7 @@ def test_full_gre_range_compact_and_method_switch_supported(admin):
     with connect() as database:
         snapshot = topology.desired(database, True)
     plans = build(snapshot)
-    assert len(plans[link["entry_id"]]["network_rules"]["pre"]) == 3
+    assert len(plans[link["entry_id"]]["socket_ranges"]) == 3
     assert len(json.dumps(plans)) < 20000
     assert not plans[link["entry_id"]]["listeners"]
     value = admin.get("/api/v1/topology").json()
@@ -186,15 +187,18 @@ def test_protocol_spaces_are_separate(admin):
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
 
 
-def test_different_native_targets_cannot_share_overlay_target_range(admin):
+def test_distinct_public_ranges_can_reach_same_ports_on_different_hosts(admin):
     value, link = single_link(admin)
     link["ports"] = [
         {"public": "8000-8009", "target": "9000-9009", "host": "127.0.0.1"},
         {"public": "8100-8109", "target": "9000-9009", "host": "127.0.0.2"},
     ]
-    assert (
-        admin.put("/api/v1/topology", json=payload(value)).json()["code"] == "range_target_conflict"
-    )
+    assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
+    with connect() as database:
+        plans = build(topology.desired(database, True))
+    config = plans[link["exit_id"]]["files"]["haproxy.cfg"]
+    assert "server target 127.0.0.1:+1000" in config
+    assert "server target 127.0.0.2:+900" in config
 
 
 @pytest.mark.parametrize(
@@ -430,7 +434,7 @@ def test_range_readiness_detects_missing_listener_without_probing_targets(tmp_pa
         agent.socket_readiness(plan)
 
 
-def test_outgoing_ports_use_live_kernel_range_and_egress_address(tmp_path, monkeypatch):
+def test_outgoing_ports_use_live_kernel_range_across_listener_addresses(tmp_path, monkeypatch):
     from pathlib import Path
 
     agent = Agent("a" * 10, root=tmp_path)
@@ -462,7 +466,8 @@ def test_outgoing_ports_use_live_kernel_range_and_egress_address(tmp_path, monke
     plan["sockets"] = [
         {"address": "192.0.2.11", "protocol": "tcp", "port": p} for p in (40000, 40001)
     ]
-    agent.outgoing_port_preflight(plan)  # Separate ingress IP does not exhaust egress.
+    with pytest.raises(OperationError, match="outgoing_port_capacity"):
+        agent.outgoing_port_preflight(plan)  # Linux automatic connect can exhaust across bind IPs.
     plan["sockets"] = []  # Kernel forwarding doesn't bind all public ports.
     agent.outgoing_port_preflight(plan)
 

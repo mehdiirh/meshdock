@@ -1,8 +1,10 @@
 """Pure desired-state compiler. Plans contain secrets: never log or expose them."""
 
 from collections import defaultdict
+from itertools import pairwise
 
 from .allocation import allocate
+from .gre_forwarding import range_config
 from .methods import REGISTRY
 from .methods.base import Context, service
 from .security import AppError, unseal
@@ -18,6 +20,8 @@ def empty():
         "binaries": [],
         "backends": [],
         "relay": [],
+        "proxy_ranges": [],
+        "socket_ranges": [],
         "checks": [],
         "listeners": [],
         "udp_listeners": [],
@@ -55,10 +59,10 @@ def build(snapshot):
         entry_plan["method_count"] += 1
         exit_plan["method_count"] += 1
         # Destination checks run on the exit, including loopback services such as an existing proxy.
-        if not adapter.kernel_mapping(link):
+        if not adapter.compact_mapping(link):
             entry_plan["forward_count"] += len(link["ports"])
             exit_plan["forward_count"] += len(link["ports"])
-        if not adapter.kernel_mapping(link) and not link.get("range_mapping"):
+        if not adapter.compact_mapping(link) and not link.get("range_mapping"):
             for mapping in link["ports"]:
                 exit_plan["checks"].append({"host": mapping["host"], "port": mapping["target"]})
     for server_id, plan in plans.items():
@@ -77,6 +81,7 @@ defaults
   timeout connect 10s
   timeout client 1h
   timeout server 1h
+  timeout tunnel 1h
   timeout check 5s
   option tcpka
 """
@@ -119,25 +124,24 @@ defaults
                     "port": public,
                 }
             )
+        ranges = plan.pop("proxy_ranges")
+        for proxy in ranges:
+            config += range_config(proxy)
         relays = plan.pop("relay")
         for relay in relays:
             config += relay_config(relay)
             plan["listeners"].append(relay["port"])
-        if pool or relays:
+        if pool or relays or ranges:
             plan["files"]["haproxy.cfg"] = config
             plan["units"][f"meshdock-{namespace}-router.service"] = service(
                 f"/usr/sbin/haproxy -Ws -f /var/lib/meshdock/{namespace}/current/haproxy.cfg -p /run/meshdock-{namespace}-haproxy.pid",
                 extra="ExecReload=/bin/kill -USR2 $MAINPID\nKillMode=mixed",
                 kind="notify",
             )
-        if plan["network_interfaces"]:
-            gre_units = [name for name in plan["units"] if name.endswith("-gre.service")]
-            unit = service(
-                f"/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-up {namespace}",
-                extra=f"RemainAfterExit=yes\nExecStopPost=/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-down {namespace}",
-                kind="oneshot",
-            )
-            plan["units"][f"meshdock-{namespace}-network.service"] = unit.replace(
+        router = f"meshdock-{namespace}-router.service"
+        gre_units = sorted(name for name in plan["units"] if name.endswith("-gre.service"))
+        if router in plan["units"] and gre_units:
+            plan["units"][router] = plan["units"][router].replace(
                 "After=network-online.target",
                 "After=network-online.target "
                 + " ".join(gre_units)
@@ -157,16 +161,17 @@ defaults
         # Allow the router's listeners plus two descriptors per active proxy
         # connection. This is per-process headroom, not a promise of throughput.
         forwards = plan.pop("forward_count")
+        listener_count = len(plan["sockets"]) + sum(
+            item["end"] - item["start"] + 1 for item in plan["socket_ranges"]
+        )
         nofile = max(65536, 2 * forwards + 4096)
-        if pool or relays:
-            nofile = max(nofile, len(plan["sockets"]) + 2 * 65536 + 4096)
+        if pool or relays or ranges:
+            nofile = max(nofile, listener_count + 2 * 65536 + 4096)
         nofile = 1 << (nofile - 1).bit_length()
         plan["resources"] = {
-            "listeners": len(plan["sockets"]),
+            "listeners": listener_count,
             "nofile": nofile if plan["units"] else 0,
-            "descriptor_budget": (
-                len(plan["sockets"]) + 2 * forwards + 4096 if plan["units"] else 0
-            ),
+            "descriptor_budget": (listener_count + 2 * forwards + 4096 if plan["units"] else 0),
         }
         for name, unit in plan["units"].items():
             if "Type=oneshot\n" not in unit:
@@ -183,13 +188,23 @@ def validate_bindings(plan):
         if identity in seen:
             raise AppError("control_port_conflict")
         seen.add(identity)
-        for interval in plan["forwarded_ranges"]:
+        for interval in plan["forwarded_ranges"] + plan["socket_ranges"]:
             if (
                 endpoint["address"] == interval["address"]
                 and endpoint["protocol"] == interval["protocol"]
                 and interval["start"] <= endpoint["port"] <= interval["end"]
             ):
                 raise AppError("control_port_conflict")
+
+    ordered = sorted(
+        plan["socket_ranges"], key=lambda item: (item["address"], item["protocol"], item["start"])
+    )
+    for previous, current in pairwise(ordered):
+        if (previous["address"], previous["protocol"]) == (
+            current["address"],
+            current["protocol"],
+        ) and current["start"] <= previous["end"]:
+            raise AppError("control_port_conflict")
 
 
 def relay_config(relay):

@@ -291,8 +291,19 @@ class Agent:
                 {"required": resources["descriptor_budget"], "available": available},
             )
 
+    @staticmethod
+    def planned_sockets(plan):
+        yield from plan.get("sockets", [])
+        for interval in plan.get("socket_ranges", []):
+            for port in range(interval["start"], interval["end"] + 1):
+                yield {
+                    "address": interval["address"],
+                    "protocol": interval["protocol"],
+                    "port": port,
+                }
+
     def outgoing_port_preflight(self, plan):
-        if not plan.get("sockets") or not shutil.which("ip"):
+        if not (plan.get("sockets") or plan.get("socket_ranges")) or not shutil.which("ip"):
             return
         first, last = map(int, Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split())
         # Route lookup only: no packet is sent to this documentation address.
@@ -305,10 +316,12 @@ class Agent:
         if not routes or not routes[0].get("prefsrc"):
             return
         address = routes[0]["prefsrc"]
+        # HAProxy uses automatic connect() source-port selection. On Linux,
+        # listeners on other local addresses can also make those port buckets
+        # unavailable, including a full range bound only to the GRE address.
+        # Conservatively require headroom across all planned TCP listeners.
         occupied = {
-            item["port"]
-            for item in plan["sockets"]
-            if item["protocol"] == "tcp" and item["address"] == address
+            item["port"] for item in self.planned_sockets(plan) if item["protocol"] == "tcp"
         }
         if not occupied:
             return
@@ -327,12 +340,12 @@ class Agent:
         # Readiness is about every declared listener, even when target services
         # in a range have not been started yet. One ss snapshot per protocol
         # avoids thousands of network probes and their sequential timeouts.
-        if not plan.get("sockets"):
+        if not (plan.get("sockets") or plan.get("socket_ranges")):
             return
         for protocol, flag in (("tcp", "-ltn"), ("udp", "-lun")):
             required = {
                 (item["address"], item["port"])
-                for item in plan["sockets"]
+                for item in self.planned_sockets(plan)
                 if item["protocol"] == protocol
             }
             if not required:
@@ -374,7 +387,7 @@ class Agent:
                     item["protocol"] == protocol
                     and item["start"] <= port <= item["end"]
                     and (address in ("*", "0.0.0.0", "::") or item["address"] == address)
-                    for item in plan.get("forwarded_ranges", [])
+                    for item in plan.get("forwarded_ranges", []) + plan.get("socket_ranges", [])
                 )
                 if not socket_conflict and not range_conflict:
                     continue
@@ -640,11 +653,18 @@ class Agent:
             changed.update(
                 unit for unit in units if unit.endswith(("-gre.service", "-network.service"))
             )
+        if any(unit.endswith("-gre.service") for unit in changed):
+            # Requires= stops the router when an overlay it binds is restarted.
+            # Explicitly include it even if its config text is unchanged.
+            changed.update(unit for unit in units if unit.endswith("-router.service"))
         # Keep unrelated running units and their network state intact. Comparing
         # referenced files also catches TLS identity changes behind a config.
         for unit in sorted(
             changed & previous["units"].keys(),
-            key=lambda name: not name.endswith("-network.service"),
+            key=lambda name: (
+                not name.endswith("-router.service"),
+                not name.endswith("-network.service"),
+            ),
         ):
             run(["systemctl", "stop", unit])
             run(["systemctl", "disable", unit], check=False)
