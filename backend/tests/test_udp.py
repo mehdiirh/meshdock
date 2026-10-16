@@ -209,3 +209,39 @@ def test_conntrack_installation_progress_remains_visible():
         json.dumps({"event": "packages_installing", "detail": {"packages": ["conntrack"]}})
     )
     assert event[1]["packages"] == ["conntrack"]
+
+
+@pytest.mark.parametrize("endpoint", ["entry", "exit", "legacy_exit"])
+def test_health_checks_only_declared_network_chains(admin, tmp_path, monkeypatch, endpoint):
+    from types import SimpleNamespace
+    from app.remote_agent import Agent, OperationError
+
+    snapshot, plans = save(admin, protocol="both")
+    link = snapshot["links"][0]
+    plan = plans[link["entry_id"] if endpoint == "entry" else link["exit_id"]]
+    if endpoint == "legacy_exit":
+        plan["network_rules"].pop("input")
+    agent = Agent("a" * 10, root=tmp_path)
+    monkeypatch.setattr(agent, "generation", lambda _: tmp_path)
+    monkeypatch.setattr(agent, "manifest", lambda _: plan)
+    monkeypatch.setattr(agent, "socket_readiness", lambda _: None)
+    commands = []
+    missing_chain = None
+
+    def run(args, **kwargs):
+        commands.append(args)
+        return SimpleNamespace(returncode=int(args[-1] == missing_chain))
+
+    monkeypatch.setattr("app.remote_agent.run", run)
+    agent.health("generation")
+    expected = [
+        ["iptables", "-w", "-t", table, "-C", parent, "-j", chain]
+        for key, (table, parent, chain) in agent.network_chains().items()
+        if plan["network_rules"].get(key)
+    ]
+    assert [args for args in commands if args[0] == "iptables"] == expected
+    assert any(args[5] == "INPUT" for args in expected) == (endpoint == "exit")
+    # Optional chains may be absent from a plan; declared chains must exist live.
+    missing_chain = expected[-1][-1]
+    with pytest.raises(OperationError, match="health_failed"):
+        agent.health("generation")

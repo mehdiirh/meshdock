@@ -787,7 +787,7 @@ class Agent:
         if plan.get("network_interfaces"):
             for key, (table, parent, chain) in self.network_chains().items():
                 if (
-                    plan["network_rules"][key]
+                    plan["network_rules"].get(key, [])
                     and run(
                         ["iptables", "-w", "-t", table, "-C", parent, "-j", chain], check=False
                     ).returncode

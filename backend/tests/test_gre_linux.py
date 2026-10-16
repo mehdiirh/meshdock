@@ -194,6 +194,17 @@ def activate(net, mapping, generation, settings=None, legacy=False):
         else:
             raise AssertionError("HAProxy listeners did not become ready")
 
+    if not legacy:
+        for ns in plans:
+            # These namespaces run services directly, without systemd. Exercise
+            # the production network and listener health checks on both hosts.
+            helper(
+                net,
+                ns,
+                "p=a.manifest(a.current()); p['units']={}; "
+                "a.manifest=lambda _: p; a.health(a.current().name)",
+            )
+
 
 def test_gre_settings_change_and_previous_settings_restore(network):
     mapping = {"public": "18000-18001", "target": "18000-18001", "host": "127.0.0.1"}
