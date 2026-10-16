@@ -110,12 +110,15 @@ test("preserves full ranges and exceptions when switching methods", async ({
     .getByLabel("Excluded entry ports 1", { exact: true })
     .fill("2222, 8080-8081");
   await expect(
-    page.getByText("64510 TCP ports", { exact: true }),
+    page.getByText("64510 port / protocol mappings", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("HAProxy TCP forwarding · compact port ranges", {
-      exact: true,
-    }),
+    page.getByText(
+      "Compact ranges · TCP via HAProxy, UDP via kernel forwarding",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible();
   await expect(
     page.getByText(/Large ranges need enough file descriptors/),
@@ -1050,4 +1053,89 @@ test("previews HAProxy listener ranges and resource counts", async ({
   ).toBeVisible();
   await expect(page.getByText(/192\.0\.2\.10 · TCP · 1023-2221/)).toBeVisible();
   await expect(page.getByText(/64512/)).toBeVisible();
+});
+
+test("each range chooses its protocol and method switches validate without losing intent", async ({
+  page,
+}) => {
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
+  const group = page.getByRole("group", {
+    name: "Forward traffic 1",
+    exact: true,
+  });
+  await group.getByRole("button", { name: "TCP + UDP", exact: true }).click();
+  await page.getByLabel("Entry port 1", { exact: true }).fill("1023-2048");
+  await page
+    .getByLabel("Destination port 1", { exact: true })
+    .fill("3023-4048");
+  await page.getByLabel("Excluded entry ports 1", { exact: true }).fill("1100");
+  await page.getByRole("button", { name: "Reverse SSH", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    group.getByRole("button", { name: "TCP + UDP", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "GRE", exact: true }).click();
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await page
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  expect((await saved).postDataJSON().links[0].ports[0]).toMatchObject({
+    protocol: "both",
+    public: "1023-2048",
+    target: "3023-4048",
+    exclude: ["1100"],
+  });
+});
+
+test("saves three independent protocol sections and blocks incompatible Backhaul transports", async ({
+  page,
+}) => {
+  await page.getByRole("group", { name: `Edge from ${a} to ${b}` }).click();
+  for (let i = 1; i <= 3; i++) {
+    if (i > 1)
+      await page
+        .getByRole("button", { name: "Add a port", exact: true })
+        .click();
+    const span = ["1023-2048", "2049-3000", "3001-3500"][i - 1];
+    await page.getByLabel(`Entry port ${i}`, { exact: true }).fill(span);
+    await page.getByLabel(`Destination port ${i}`, { exact: true }).fill(span);
+    await page
+      .getByRole("group", { name: `Forward traffic ${i}`, exact: true })
+      .getByRole("button", {
+        name: ["TCP", "UDP", "TCP + UDP"][i - 1],
+        exact: true,
+      })
+      .click();
+  }
+  await page.getByRole("button", { name: "Backhaul", exact: true }).click();
+  await page.getByText("Advanced settings", { exact: true }).click();
+  await page.getByRole("button", { name: "wssmux", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "tcp", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save & deploy", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("group", { name: "Forward traffic 2", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath("protocol-sections.png"),
+  });
+  const saved = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/topology"),
+  );
+  await page
+    .getByRole("button", { name: "Save & deploy", exact: true })
+    .click();
+  expect(
+    (await saved)
+      .postDataJSON()
+      .links[0].ports.map((p: { protocol?: string }) => p.protocol || "tcp"),
+  ).toEqual(["tcp", "udp", "both"]);
 });

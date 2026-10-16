@@ -3,7 +3,11 @@ import { compactPorts, mappingSegments, mappingStatus } from "./ports";
 import type { MethodInfo } from "./types";
 
 const gre = {
-  mapping: { native_ranges: true, max_ports: 65535 },
+  mapping: {
+    native_ranges: true,
+    max_ports: 131070,
+    protocols: ["tcp", "udp"],
+  },
 } as MethodInfo;
 const ssh = {
   mapping: { native_ranges: false, max_ports: 65535 },
@@ -70,4 +74,39 @@ it("keeps large deployment previews compact without hiding gaps", () => {
     "1-65535",
   );
   expect(compactPorts([])).toBe("");
+});
+
+it("supports independent row protocols and validates transport changes", () => {
+  const tcp = {
+    public: "1023-2048",
+    target: "1023-2048",
+    host: "127.0.0.1",
+    protocol: "tcp" as const,
+  };
+  const udp = { ...tcp, protocol: "udp" as const };
+  expect(mappingStatus([tcp, udp], gre).error).toBe("");
+  expect(mappingStatus([tcp, udp], gre).count).toBe(2052);
+  expect(mappingStatus([{ ...tcp, protocol: "both" }, udp], gre).error).toBe(
+    "mappingOverlap",
+  );
+  expect(mappingStatus([udp], ssh).error).toBe("mappingProtocolUnsupported");
+  const transport = {
+    ...gre,
+    transports: {
+      tcp: { payload_protocols: ["tcp", "udp"] },
+      wss: { payload_protocols: ["tcp"] },
+    },
+  } as unknown as MethodInfo;
+  expect(mappingStatus([udp], transport, 22, { transport: "tcp" }).error).toBe(
+    "",
+  );
+  expect(mappingStatus([udp], transport, 22, { transport: "wss" }).error).toBe(
+    "mappingProtocolUnsupported",
+  );
+  expect(
+    mappingStatus([{ ...udp, public: 22, target: 53 }], gre, 22).error,
+  ).toBe("");
+  expect(mappingStatus([{ ...udp, public: "3001-1500" }], gre).error).toBe(
+    "invalidRange",
+  );
 });

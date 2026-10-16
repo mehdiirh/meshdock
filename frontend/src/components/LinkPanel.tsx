@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import { mappingStatus } from "../ports";
+import { mappingStatus, supportedProtocols } from "../ports";
 import type {
   Link,
   Server,
@@ -60,6 +60,7 @@ export function LinkPanel({
     value.ports,
     method,
     servers.find((s) => s.id === value.entry_id)?.ssh_port,
+    value.settings,
   );
   return (
     <aside className="inspector">
@@ -209,6 +210,41 @@ export function LinkPanel({
         </div>
         {value.ports.map((port, i) => (
           <div className="port-card" key={i}>
+            <div
+              className="mapping-protocol"
+              role="group"
+              aria-label={`${t("mappingProtocol")} ${i + 1}`}
+            >
+              <span>{t("mappingProtocol")}</span>
+              {(["tcp", "udp", "both"] as const).map((protocol) => (
+                <button
+                  key={protocol}
+                  type="button"
+                  className="protocol-choice"
+                  aria-pressed={(port.protocol || "tcp") === protocol}
+                  disabled={
+                    (protocol !== "tcp" &&
+                      !supportedProtocols(method, value.settings).includes(
+                        "udp",
+                      )) ||
+                    (protocol !== "udp" &&
+                      !supportedProtocols(method, value.settings).includes(
+                        "tcp",
+                      ))
+                  }
+                  onClick={() =>
+                    setValue((v) => ({
+                      ...v,
+                      ports: v.ports.map((p, n) =>
+                        n === i ? { ...p, protocol } : p,
+                      ),
+                    }))
+                  }
+                >
+                  {t(`mappingProtocol_${protocol}`)}
+                </button>
+              ))}
+            </div>
             <div className="port-row">
               <Field label={t("publicPort")}>
                 <input
@@ -323,6 +359,9 @@ export function LinkPanel({
             })}
           </span>
           {!status.native && <small>{t("socketCapacityHint")}</small>}
+          {value.ports.some(
+            (p) => p.protocol === "udp" || p.protocol === "both",
+          ) && <small>{t("udpForwardingHint")}</small>}
           {method?.mapping.forwards_per_session && (
             <small>
               {t("sshSessionCount", {

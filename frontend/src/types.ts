@@ -22,6 +22,7 @@ export interface Server {
   position: { x: number; y: number };
 }
 export interface Port {
+  protocol?: "tcp" | "udp" | "both";
   public: number | string;
   target: number | string;
   exclude?: (number | string)[];
@@ -124,6 +125,7 @@ export interface MethodInfo {
     string,
     {
       architectures?: string[];
+      payload_protocols?: ("tcp" | "udp")[];
       encrypted: boolean;
       control_protocols: ("tcp" | "udp")[];
       tls_mode: "none" | "verified_native" | "verified_bridge";

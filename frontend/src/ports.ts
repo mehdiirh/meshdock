@@ -1,4 +1,4 @@
-import type { MethodInfo, Port } from "./types";
+import type { MethodInfo, Port, MethodSettings } from "./types";
 
 export function portBounds(value: number | string): [number, number] {
   if (!/^[0-9]{1,5}(-[0-9]{1,5})?$/.test(String(value)))
@@ -31,29 +31,64 @@ export function mappingSegments(port: Port): [number, number][] {
   return segments;
 }
 
+export function mappingProtocols(port: Port): ("tcp" | "udp")[] {
+  return port.protocol === "both" ? ["tcp", "udp"] : [port.protocol || "tcp"];
+}
+
+export function supportedProtocols(
+  method?: MethodInfo,
+  settings?: MethodSettings,
+): string[] {
+  const selected = String(
+    settings?.transport ??
+      method?.settings_schema?.properties.transport?.default ??
+      "",
+  );
+  return (
+    method?.transports?.[selected]?.payload_protocols ??
+    method?.mapping.protocols ?? ["tcp"]
+  );
+}
+
 export function mappingStatus(
   ports: Port[],
   method?: MethodInfo,
   sshPort?: number,
+  settings?: MethodSettings,
 ) {
   let count = 0;
   let native = false;
   try {
-    const occupied: [number, number][] = [];
+    const occupied: [number, number, string][] = [];
+    const supported = supportedProtocols(method, settings);
     for (const port of ports) {
+      const protocols = mappingProtocols(port);
+      if (method && protocols.some((p) => !supported.includes(p)))
+        throw new Error("mappingProtocolUnsupported");
       const spans = mappingSegments(port);
       const [first, last] = portBounds(port.public);
       native ||=
         !!method?.mapping.native_ranges &&
-        (first !== last || !!port.exclude?.length);
-      for (const [start, end] of spans) {
-        if (occupied.some(([a, b]) => Math.max(a, start) <= Math.min(b, end)))
-          throw new Error("mappingOverlap");
-        occupied.push([start, end]);
-        if (sshPort && start <= sshPort && sshPort <= end)
-          throw new Error("mappingSshConflict");
-        count += end - start + 1;
-      }
+        (first !== last || !!port.exclude?.length || protocols.includes("udp"));
+      for (const protocol of protocols)
+        for (const [start, end] of spans) {
+          if (
+            occupied.some(
+              ([a, b, p]) =>
+                p === protocol && Math.max(a, start) <= Math.min(b, end),
+            )
+          )
+            throw new Error("mappingOverlap");
+          occupied.push([start, end, protocol]);
+          if (
+            protocol === "tcp" &&
+            sshPort &&
+            start <= sshPort &&
+            sshPort <= end
+          )
+            throw new Error("mappingSshConflict");
+          count += end - start + 1;
+        }
     }
     if (method && count > method.mapping.max_ports)
       throw new Error("mappingLimit");

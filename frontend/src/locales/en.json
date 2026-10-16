@@ -183,11 +183,11 @@
   "udpPorts": "UDP ports",
   "excludedPorts": "Excluded entry ports",
   "exclusionHint": "Comma-separated ports or ranges inside the entry range. Remaining target offsets stay unchanged.",
-  "mappedPortCount_one": "{{count}} TCP port",
-  "mappedPortCount_other": "{{count}} TCP ports",
-  "nativeRangeMode": "HAProxy TCP forwarding · compact port ranges",
+  "mappedPortCount_one": "{{count}} port / protocol mapping",
+  "mappedPortCount_other": "{{count}} port / protocol mappings",
+  "nativeRangeMode": "Compact ranges · TCP via HAProxy, UDP via kernel forwarding",
   "expandedRangeMode": "Individual transport listeners · capacity checked on the server",
-  "mappingPlatform": "Supported hosts: Debian / Ubuntu, systemd, IPv4. Application mappings: TCP.",
+  "mappingPlatform": "Supported hosts: Debian / Ubuntu, systemd, IPv4. Choose TCP, UDP or both per range, subject to transport support.",
   "invalidRange": "Enter a port or an ascending range from 1 to 65535, for example 8000-8099.",
   "rangeWidth": "Entry and target ranges must contain the same number of ports.",
   "invalidExclusions": "Exceptions must be inside the entry range, without duplicates or overlaps (maximum 128 items).",
@@ -226,7 +226,7 @@
       "bytes": "bytes"
     },
     "methods": {
-      "backhaul": "TCP, TCPMUX, WS, WSS, WSMUX and WSSMUX. TLS modes use a per-link certificate and a verifying client bridge. Multiplexing controls appear only for mux transports.",
+      "backhaul": "TCP, UDP, TCPMUX, WS, WSS, WSMUX and WSSMUX. TCP supports TCP/UDP mappings; native UDP supports UDP only. TLS modes use a per-link certificate and a verifying client bridge. Mux controls appear only for mux transports.",
       "gre": "Adjust packet size and IP headers on both GRE interfaces. MTU must also fit your network path; a lower value can help avoid fragmentation.",
       "rathole": "Choose TCP, Noise, TLS, WS or WSS. Noise pins the server key. TLS and WSS use managed, verifying TLS bridges; TCP and WS do not encrypt traffic.",
       "reverse_ssh": "Tune the managed SSH client. Host verification stays enabled; your management SSH daemon is not changed.",
@@ -381,5 +381,11 @@
     "legendTunnel": "Tunnel",
     "legendHop": "SSH hop"
   },
-  "haproxyRanges": "HAProxy listener ranges"
+  "haproxyRanges": "HAProxy listener ranges",
+  "mappingProtocol": "Forward traffic",
+  "mappingProtocol_tcp": "TCP",
+  "mappingProtocol_udp": "UDP",
+  "mappingProtocol_both": "TCP + UDP",
+  "mappingProtocolUnsupported": "This mapping protocol is not supported by the selected method or transport. Change the protocol or select a compatible transport.",
+  "udpForwardingHint": "TCP uses HAProxy. UDP uses native transport listeners or GRE packet forwarding. UDP rows cannot share entry ports with another UDP connection."
 }

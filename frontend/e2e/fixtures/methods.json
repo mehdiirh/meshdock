@@ -5,7 +5,8 @@
     "encrypted": true,
     "direction": "exit-to-entry",
     "protocols": [
-      "tcp"
+      "tcp",
+      "udp"
     ],
     "requirements": [
       "outbound-tcp",
@@ -19,12 +20,13 @@
       "ranges": true,
       "exceptions": true,
       "native_ranges": false,
-      "max_ports": 65535,
+      "max_ports": 131070,
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
-        "tcp"
+        "tcp",
+        "udp"
       ],
       "platforms": [
         "debian",
@@ -225,7 +227,8 @@
     "encrypted": true,
     "direction": "entry-to-exit",
     "protocols": [
-      "tcp"
+      "tcp",
+      "udp"
     ],
     "requirements": [
       "outbound-udp",
@@ -239,12 +242,13 @@
       "ranges": true,
       "exceptions": true,
       "native_ranges": false,
-      "max_ports": 65535,
+      "max_ports": 131070,
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
-        "tcp"
+        "tcp",
+        "udp"
       ],
       "platforms": [
         "debian",
@@ -327,7 +331,8 @@
     "encrypted": false,
     "direction": "entry-to-exit",
     "protocols": [
-      "tcp"
+      "tcp",
+      "udp"
     ],
     "requirements": [
       "protocol-47",
@@ -338,12 +343,13 @@
       "ranges": true,
       "exceptions": true,
       "native_ranges": true,
-      "max_ports": 65535,
+      "max_ports": 131070,
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
-        "tcp"
+        "tcp",
+        "udp"
       ],
       "platforms": [
         "debian",
@@ -392,7 +398,8 @@
     "encrypted": false,
     "direction": "exit-to-entry",
     "protocols": [
-      "tcp"
+      "tcp",
+      "udp"
     ],
     "requirements": [
       "outbound-tcp"
@@ -402,12 +409,13 @@
       "ranges": true,
       "exceptions": true,
       "native_ranges": false,
-      "max_ports": 65535,
+      "max_ports": 131070,
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
-        "tcp"
+        "tcp",
+        "udp"
       ],
       "platforms": [
         "debian",
@@ -425,7 +433,8 @@
             "ws",
             "wss",
             "wsmux",
-            "wssmux"
+            "wssmux",
+            "udp"
           ],
           "scope": "both",
           "title": "Transport",
@@ -600,11 +609,18 @@
         "control_protocols": [
           "tcp"
         ],
+        "payload_protocols": [
+          "tcp",
+          "udp"
+        ],
         "tls_mode": "none"
       },
       "tcpmux": {
         "encrypted": false,
         "control_protocols": [
+          "tcp"
+        ],
+        "payload_protocols": [
           "tcp"
         ],
         "tls_mode": "none"
@@ -614,11 +630,17 @@
         "control_protocols": [
           "tcp"
         ],
+        "payload_protocols": [
+          "tcp"
+        ],
         "tls_mode": "none"
       },
       "wss": {
         "encrypted": true,
         "control_protocols": [
+          "tcp"
+        ],
+        "payload_protocols": [
           "tcp"
         ],
         "tls_mode": "verified_bridge"
@@ -628,6 +650,9 @@
         "control_protocols": [
           "tcp"
         ],
+        "payload_protocols": [
+          "tcp"
+        ],
         "tls_mode": "none"
       },
       "wssmux": {
@@ -635,7 +660,21 @@
         "control_protocols": [
           "tcp"
         ],
+        "payload_protocols": [
+          "tcp"
+        ],
         "tls_mode": "verified_bridge"
+      },
+      "udp": {
+        "encrypted": false,
+        "control_protocols": [
+          "tcp",
+          "udp"
+        ],
+        "payload_protocols": [
+          "udp"
+        ],
+        "tls_mode": "none"
       }
     }
   },
@@ -645,7 +684,8 @@
     "encrypted": true,
     "direction": "exit-to-entry",
     "protocols": [
-      "tcp"
+      "tcp",
+      "udp"
     ],
     "requirements": [
       "outbound-tcp"
@@ -655,12 +695,13 @@
       "ranges": true,
       "exceptions": true,
       "native_ranges": false,
-      "max_ports": 65535,
+      "max_ports": 131070,
       "max_listener_ports": 65535,
       "capacity_basis": "system_resources",
       "forwards_per_session": null,
       "protocols": [
-        "tcp"
+        "tcp",
+        "udp"
       ],
       "platforms": [
         "debian",

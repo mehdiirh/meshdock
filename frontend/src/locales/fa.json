@@ -183,11 +183,11 @@
   "udpPorts": "پورت‌های UDP",
   "excludedPorts": "پورت‌های مستثنا در ورودی",
   "exclusionHint": "پورت‌ها یا بازه‌های داخل بازه ورودی را با ویرگول انگلیسی جدا کنید. فاصله شماره پورت‌های مقصد تغییر نمی‌کند.",
-  "mappedPortCount_one": "{{count}} پورت TCP",
-  "mappedPortCount_other": "{{count}} پورت TCP",
-  "nativeRangeMode": "هدایت TCP با HAProxy · بازه‌های پورت فشرده",
+  "mappedPortCount_one": "{{count}} نگاشت پورت / پروتکل",
+  "mappedPortCount_other": "{{count}} نگاشت پورت / پروتکل",
+  "nativeRangeMode": "بازه‌های فشرده · TCP با HAProxy و UDP با هدایت هسته",
   "expandedRangeMode": "شنونده‌های جداگانهٔ تونل · ظرفیت روی سرور بررسی می‌شود",
-  "mappingPlatform": "سرورهای پشتیبانی‌شده: دبیان و اوبونتو، systemd و IPv4. نگاشت برنامه‌ها: TCP.",
+  "mappingPlatform": "میزبان‌های پشتیبانی‌شده: Debian / Ubuntu، systemd و IPv4. برای هر بازه TCP، UDP یا هر دو را با توجه به پشتیبانی ترنسپورت انتخاب کنید.",
   "invalidRange": "یک پورت یا بازه صعودی بین ۱ تا ۶۵۵۳۵ وارد کنید، مانند 8000-8099.",
   "rangeWidth": "بازه ورودی و مقصد باید تعداد پورت یکسانی داشته باشند.",
   "invalidExclusions": "استثناها باید داخل بازه ورودی، بدون تکرار یا هم‌پوشانی باشند؛ حداکثر ۱۲۸ مورد.",
@@ -226,7 +226,7 @@
       "bytes": "بایت"
     },
     "methods": {
-      "backhaul": "گزینه‌های TCP، TCPMUX، WS، WSS، WSMUX و WSSMUX. حالت‌های TLS از گواهی اختصاصی اتصال و پل تأییدکننده استفاده می‌کنند. تنظیمات مالتی‌پلکس فقط برای حالت‌های mux نمایش داده می‌شوند.",
+      "backhaul": "ترنسپورت‌های TCP، UDP، TCPMUX، WS، WSS، WSMUX و WSSMUX. ترنسپورت TCP از نگاشت TCP و UDP پشتیبانی می‌کند؛ UDP بومی فقط UDP را منتقل می‌کند. حالت‌های TLS گواهی اختصاصی اتصال و پل کلاینت با اعتبارسنجی دارند. تنظیمات Mux فقط در حالت‌های مربوط نمایش داده می‌شوند.",
       "gre": "اندازه بسته و سرآیند IP را در هر دو رابط GRE تنظیم کنید. MTU باید با مسیر شبکه سازگار باشد؛ مقدار کمتر می‌تواند از تکه‌تکه‌شدن بسته‌ها جلوگیری کند.",
       "rathole": "انتخاب TCP، Noise، TLS، WS یا WSS. در Noise کلید سرور بررسی می‌شود. TLS و WSS از پل مدیریت‌شده با تأیید گواهی استفاده می‌کنند؛ TCP و WS رمزنگاری ندارند.",
       "reverse_ssh": "کلاینت SSH مدیریت‌شده را تنظیم کنید. تایید میزبان فعال می‌ماند؛ سرویس SSH مدیریتی شما تغییر نمی‌کند.",
@@ -381,5 +381,11 @@
     "legendTunnel": "تونل",
     "legendHop": "پرش SSH"
   },
-  "haproxyRanges": "بازه‌های شنوندهٔ HAProxy"
+  "haproxyRanges": "بازه‌های شنوندهٔ HAProxy",
+  "mappingProtocol": "ترافیک عبوری",
+  "mappingProtocol_tcp": "TCP",
+  "mappingProtocol_udp": "UDP",
+  "mappingProtocol_both": "TCP + UDP",
+  "mappingProtocolUnsupported": "روش یا انتقال انتخاب‌شده از پروتکل این نگاشت پشتیبانی نمی‌کند. پروتکل یا انتقال را تغییر دهید.",
+  "udpForwardingHint": "TCP از HAProxy استفاده می‌کند. UDP از شنونده‌های بومی انتقال یا ارسال بسته در GRE استفاده می‌کند. پورت ورودی UDP بین دو اتصال UDP مشترک نمی‌شود."
 }
