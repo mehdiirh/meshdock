@@ -71,10 +71,20 @@ Range intent remains compact in the existing `links.ports` JSON column and immut
 
 References: [HAProxy bind ranges and server-port offsets](https://docs.haproxy.org/2.8/configuration.html#4-server), [Linux IPv4 interface settings](https://www.kernel.org/doc/html/latest/networking/ip-sysctl.html), [FRP TCP proxies](https://gofrp.org/en/docs/features/tcp-udp/), [Hysteria forwarding configuration](https://v2.hysteria.network/docs/advanced/Full-Client-Config/).
 
+## Wildcard UDP services behind GRE
+
+When the destination is `127.0.0.1` and a UDP application listens on all addresses, a reply can choose the GRE address instead of loopback. That reply does not match the destination side of the DNAT session; conntrack may also remap its source port. Merely receiving a datagram on the exit or injecting a diagnostic reply with a forced source address does not validate the application's return path.
+
+GRE plan version 5 adds narrowly scoped source NAT in the exit's owned NAT INPUT chain for loopback UDP destinations. The application sees a local peer, so its reply follows the existing tracked connection. Rules match UDP, the owned GRE interface, peer source, destination address/port and the original DNAT destination. TCP still uses HAProxy, and Xray configuration is not edited.
+
+Upgrade the controller, then reconcile the connection to install the new plan. MeshDock installs `conntrack` when needed and invalidates only UDP sessions whose original source and destination are that link's private GRE endpoints. This also handles clients that keep retrying from the same source port; stale translations must not outlive a rule change. The cleanup scope is journaled for rollback and removal. No public-port-wide or global conntrack flush is used. Active UDP sessions on the affected link reconnect; unrelated connections are preserved.
+
 ## UDP readiness and verification
 
-UDP has no universal connect/health handshake. MeshDock checks native UDP listeners, managed units and GRE peer readiness; it does not claim that every UDP destination application responds. Test with the application's actual protocol after deployment. Existing conntrack sessions may outlive a mapping change; cleanup never flushes shared conntrack state.
+UDP has no universal connect/health handshake. MeshDock checks native UDP listeners, managed units and GRE peer readiness; it does not claim that every UDP destination application responds. Test with the application's actual protocol after deployment. GRE loopback UDP transitions invalidate the affected private-endpoint sessions as described above; cleanup never flushes shared conntrack state.
 
 `test_udp.py` covers capabilities, per-row intent, protocol conflicts and migration. `test_settings_rollback.py` injects deployment health failures and verifies saved generations and retry across the UDP-capable methods. Opt-in isolated Linux tests cover real GRE TCP/UDP packets, full UDP ranges, offsets, exclusions, cleanup and restoration, and native public ingress (`test_gre_linux.py`, `test_udp_linux.py`). `test_transport_smoke.py` checks real pinned UDP tunnel binaries, including Rathole WS/WSS using x86 because the pinned ARM64 binary lacks those transports. These tests do not contact inventory servers.
 
 Backhaul payload capabilities are verified against [its pinned transport dispatcher](https://github.com/Musixal/Backhaul/blob/v0.7.2/internal/server/server.go) and native listener implementations. Transport-specific payload metadata is published by `/api/v1/methods`; extending an adapter requires updating that contract, validation and actual packet tests.
+
+The opt-in `test_wireguard_linux.py` test uses disposable keys and a checksum-verified Xray 26.1.31 binary (`MESHDOCK_TEST_XRAY`) to authenticate through GRE and transfer both TCP and UDP payloads. It also checks ordinary TCP forwarding alongside WireGuard on the same public port. Namespace regression tests cover wildcard and explicit loopback listeners, equal/shifted ports, reply source ports, failed partial rule installation, rollback, cleanup, and recovery of a previously broken client tuple without clearing an unrelated UDP session.
