@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from ..ports import count
+from ..ports import count, protocols
 from ..security import AppError
 from .options import Options
 
@@ -117,7 +117,7 @@ class Adapter:
             "ranges": True,
             "exceptions": True,
             "native_ranges": self.native_ranges,
-            "max_ports": 65535 if self.native_ranges else self.max_expanded_ports,
+            "max_ports": self.max_expanded_ports * len(self.metadata["protocols"]),
             "max_listener_ports": self.max_expanded_ports,
             "capacity_basis": "system_resources",
             "forwards_per_session": self.forwards_per_session,
@@ -125,7 +125,15 @@ class Adapter:
             "platforms": ["debian", "ubuntu"],
         }
 
+    def allocation_protocols(self, link, mapping):
+        return protocols(mapping)
+
+    def payload_protocols(self, link):
+        return self.transport(link).get("payload_protocols", self.metadata["protocols"])
+
     def internal_address(self, link):
+        if any("udp" in protocols(p) for p in link["ports"]):
+            return f"10.254.{link['slot'] // 256}.{link['slot'] % 256}"
         # Linux routes the entire 127/8 block locally. Each link gets its own
         # listener space without changing interfaces or claiming application ports.
         return f"127.77.{link['slot'] // 256}.{link['slot'] % 256}"
@@ -137,17 +145,28 @@ class Adapter:
         """Optional compact relay allocation, using known endpoint TCP consumers."""
 
     def validate_mappings(self, link):
-        if not self.compact_mapping(link) and count(link["ports"]) > self.max_expanded_ports:
+        supported = self.payload_protocols(link)
+        if any(p not in supported for mapping in link["ports"] for p in protocols(mapping)):
+            raise AppError("mapping_protocol_unsupported", 422, {"method": self.metadata["id"]})
+        counts = [
+            count([{**m, "protocol": protocol} for m in link["ports"] if protocol in protocols(m)])
+            for protocol in supported
+        ]
+        if not self.compact_mapping(link) and max(counts, default=0) > self.max_expanded_ports:
             raise AppError(
                 "mapping_limit",
                 details={"limit": self.max_expanded_ports, "method": self.metadata["id"]},
             )
 
     def bindings(self, context, entry, exit):
-        for port in context.link.get("internal_ports", []):
-            entry["sockets"].append(
-                {"address": context.bind_address, "port": port, "protocol": "tcp"}
-            )
+        seen = set()
+        for mapping, port in zip(context.link["ports"], context.link.get("internal_ports", [])):
+            protocol = mapping.get("protocol", "tcp")
+            if (port, protocol) not in seen:
+                entry["sockets"].append(
+                    {"address": context.bind_address, "port": port, "protocol": protocol}
+                )
+                seen.add((port, protocol))
         for port in context.link.get("auxiliary_ports", []):
             entry["sockets"].append(
                 {"address": context.bind_address, "port": port, "protocol": "tcp"}

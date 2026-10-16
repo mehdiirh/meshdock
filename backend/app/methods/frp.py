@@ -49,7 +49,7 @@ class FrpWSS(Adapter):
         "name": "FRP",
         "encrypted": True,
         "direction": "exit-to-entry",
-        "protocols": ["tcp"],
+        "protocols": ["tcp", "udp"],
         "requirements": ["outbound-tcp", "pinned-private-tls"],
         "priority": 1,
         "score": 3.65,
@@ -132,12 +132,14 @@ transport.heartbeatInterval = {options.heartbeat_interval}
         for index, port in enumerate(context.link["ports"]):
             client += f"""\n[[proxies]]
 name = "port-{index}"
-type = "tcp"
+type = "{port.get('protocol', 'tcp')}"
 localIP = "{port['host']}"
 localPort = {port['target']}
 remotePort = {context.internal(index)}
 """
-            entry["listeners"].append(context.internal(index))
+            entry["udp_listeners" if port.get("protocol") == "udp" else "listeners"].append(
+                context.internal(index)
+            )
             entry["backends"].append(
                 (port, context.bind_address, context.internal(index), context.link)
             )

@@ -6,7 +6,11 @@ from collections import defaultdict
 def compact(rules):
     """Merge adjacent ports only when every other match has identical scope."""
     groups = defaultdict(set)
+    guards = []
     for rule in rules:
+        if rule.get("action") == "DROP":
+            guards.append(rule)
+            continue
         if rule["protocol"] not in ("tcp", "udp") or not isinstance(rule.get("port"), int):
             yield rule
             continue
@@ -22,6 +26,8 @@ def compact(rules):
             yield {**dict(key), "port": first if first == last else f"{first}:{last}"}
             first = last = port
         yield {**dict(key), "port": first if first == last else f"{first}:{last}"}
+
+    yield from guards
 
 
 def script(namespace, rules):
@@ -40,9 +46,13 @@ def script(namespace, rules):
             line += f' -i {rule["interface"]}'
         if rule.get("destination"):
             line += f' -d {rule["destination"]}'
-        if rule["protocol"] in ("tcp", "udp"):
+        if rule["protocol"] in ("tcp", "udp") and "port" in rule:
             line += f' --dport {rule["port"]}'
-        lines.append(line + " -j ACCEPT")
+        if rule.get("original_destination"):
+            line += f' -m conntrack --ctstate DNAT --ctorigdst {rule["original_destination"]}'
+        if rule.get("nonlocal"):
+            line += " ! -i lo"
+        lines.append(line + " -j " + rule.get("action", "ACCEPT"))
     lines.extend(
         [
             "COMMIT",

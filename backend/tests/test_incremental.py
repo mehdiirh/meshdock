@@ -111,3 +111,41 @@ def test_unit_signature_tracks_referenced_tls_material(tmp_path):
     new = copy.deepcopy(plan)
     new["files"]["tls.pem"] = "new"
     assert agent.unit_signature(plan, "test") != agent.unit_signature(new, "test")
+
+
+def test_owned_address_restarts_native_consumers_on_apply_and_rollback(tmp_path, monkeypatch):
+    from app.planner import empty
+
+    agent = Agent("a" * 10, root=tmp_path / "agent")
+    agent.units = tmp_path / "units"
+    agent.units.mkdir()
+    address = agent.prefix + "1-address.service"
+    native = agent.prefix + "1.service"
+    router = agent.prefix + "router.service"
+    commands = []
+    monkeypatch.setattr(
+        "app.remote_agent.run",
+        lambda args, **kw: commands.append(args) or SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(agent, "network_down", lambda: None)
+    monkeypatch.setattr(agent, "firewall", lambda _: None)
+    generations = []
+    for index in (1, 2):
+        plan = empty()
+        plan["units"] = {
+            address: f"ExecStart=/bin/sh {agent.root}/current/address.sh up",
+            native: f"Requires={address}\nExecStart=/native",
+            router: f"Requires={address}\nExecStart=/router",
+        }
+        plan["files"]["address.sh"] = f"address-version-{index}"
+        directory = agent.generation(str(index) * 32)
+        directory.mkdir(parents=True)
+        atomic_json(directory / "manifest.json", plan)
+        generations.append(directory)
+    agent.switch(generations[0])
+    for directory in (generations[1], generations[0]):
+        commands.clear()
+        agent.switch(directory)
+        starts = [cmd[-1] for cmd in commands if cmd[:2] == ["systemctl", "start"]]
+        assert starts.index(address) < starts.index(native)
+        assert starts.index(address) < starts.index(router)

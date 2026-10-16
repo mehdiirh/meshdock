@@ -162,7 +162,7 @@ msgstr "The mapping includes the entry server’s SSH port. Add it to the explic
 
 msgid "range_pool_conflict"
 msgstr ""
-"A GRE range overlaps another connection on this entry. Use disjoint ranges or explicit "
+"A GRE range or UDP mapping overlaps another connection using the same protocol on this entry. Use disjoint ranges or explicit "
 "exceptions."
 
 msgid "port_capacity"
@@ -172,7 +172,7 @@ msgid "public_address_missing"
 msgstr "The configured public IPv4 must be assigned to a local interface on this server."
 
 msgid "range_kernel_unsupported"
-msgstr "Shifted GRE port ranges require Linux kernel 4.18 or newer."
+msgstr "Shifted UDP port ranges require Linux kernel 4.18 or newer."
 
 msgid "listener_conflict"
 msgstr ""
@@ -188,7 +188,7 @@ msgstr ""
 "available capacity."
 
 msgid "outgoing_port_capacity"
-msgstr "The planned listeners occupy all automatic outgoing TCP ports. Add explicit exceptions within the reported range on this server. A different listener IP alone may not free outgoing ports."
+msgstr "The planned listeners occupy all automatic outgoing ports for a protocol. Add explicit exceptions within the reported range on this server. A different listener IP alone may not free outgoing ports."
 
 msgid "invalid_method_settings"
 msgstr "Invalid method settings. Check supported options, limits, and dependencies."
@@ -317,3 +317,6 @@ msgstr "The server and its connections were removed after endpoint cleanup."
 
 msgid "board_server_in_use"
 msgstr "This server has a tunnel or SSH jump connection. Remove those connections and complete any pending cleanup before moving it to inventory."
+
+msgid "mapping_protocol_unsupported"
+msgstr "The selected method or transport does not support this mapping protocol. Choose a compatible transport or change the mapping protocol."

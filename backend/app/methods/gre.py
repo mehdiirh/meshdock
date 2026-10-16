@@ -1,7 +1,8 @@
 from ipaddress import IPv4Address
 
 from ..gre_forwarding import configure_ranges, relay_offset
-from ..ports import bounds
+from ..ports import bounds, protocols
+from ..udp_forwarding import gre_ranges
 from .base import Adapter, service
 from .options import Options, option
 
@@ -13,7 +14,7 @@ class GREOptions(Options):
 
 
 class GRE(Adapter):
-    plan_version = 3
+    plan_version = 4
     options_model = GREOptions
     control_protocol = None
     native_ranges = True
@@ -24,7 +25,9 @@ class GRE(Adapter):
 
     def compact_mapping(self, link):
         return any(
-            bounds(p["public"])[0] != bounds(p["public"])[1] or p.get("exclude")
+            bounds(p["public"])[0] != bounds(p["public"])[1]
+            or p.get("exclude")
+            or "udp" in protocols(p)
             for p in link["ports"]
         )
 
@@ -36,7 +39,7 @@ class GRE(Adapter):
         "name": "GRE",
         "encrypted": False,
         "direction": "entry-to-exit",
-        "protocols": ["tcp"],
+        "protocols": ["tcp", "udp"],
         "requirements": ["protocol-47", "public-ipv4"],
     }
 
@@ -76,7 +79,9 @@ esac
             plan["interfaces"].append({"name": iface, "network": str(IPv4Address(first)) + "/30"})
             plan["firewall"].append({"protocol": "gre", "source": peer["address"]})
         if self.compact_mapping(context.link):
-            configure_ranges(context, entry, exit, iface, ip_a, ip_b)
+            if any("tcp" in protocols(p) for p in context.link["ports"]):
+                configure_ranges(context, entry, exit, iface, ip_a, ip_b)
+            gre_ranges(context, entry, exit, iface, ip_a, ip_b)
             return
         for index, port in enumerate(context.link["ports"]):
             internal_port = context.internal(index)

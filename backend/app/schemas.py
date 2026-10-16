@@ -92,6 +92,7 @@ class Server(AccessHost):
 
 
 class Port(Model):
+    protocol: Literal["tcp", "udp", "both"] = "tcp"
     public: int | str
     target: int | str
     exclude: list[int | str] = Field(default_factory=list, max_length=128)

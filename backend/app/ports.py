@@ -32,14 +32,27 @@ def segments(mapping):
         yield cursor, last, target + cursor - first, target + last - first
 
 
+def protocols(mapping):
+    value = mapping.get("protocol", "tcp")
+    return ("tcp", "udp") if value == "both" else (value,)
+
+
 def count(mappings):
-    return sum(end - start + 1 for p in mappings for start, end, _, _ in segments(p))
+    return sum(
+        (end - start + 1) * len(protocols(p)) for p in mappings for start, end, _, _ in segments(p)
+    )
 
 
 def expand(mappings):
     return [
-        {"public": public, "target": target + public - start, "host": mapping["host"]}
+        {
+            "public": public,
+            "target": target + public - start,
+            "host": mapping["host"],
+            "protocol": protocol,
+        }
         for mapping in mappings
+        for protocol in protocols(mapping)
         for start, end, target, _ in segments(mapping)
         for public in range(start, end + 1)
     ]
@@ -50,6 +63,6 @@ def contains(mapping, port):
 
 
 def overlaps(left, right):
-    return any(
+    return bool(set(protocols(left)) & set(protocols(right))) and any(
         max(a, c) <= min(b, d) for a, b, _, _ in segments(left) for c, d, _, _ in segments(right)
     )

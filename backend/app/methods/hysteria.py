@@ -27,7 +27,7 @@ class Hysteria2(Adapter):
         "name": "Hysteria 2",
         "encrypted": True,
         "direction": "entry-to-exit",
-        "protocols": ["tcp"],
+        "protocols": ["tcp", "udp"],
         "requirements": ["outbound-udp", "pinned-private-tls"],
         "priority": 2,
         "score": 3.55,
@@ -53,7 +53,7 @@ class Hysteria2(Adapter):
             },
             "auth": {"type": "password", "password": context.secrets["token"]},
             "obfs": obfuscation,
-            "disableUDP": True,
+            "disableUDP": not any(p.get("protocol") == "udp" for p in context.link["ports"]),
         }
         client = {
             "server": f'{context.exit["address"]}:{context.control}',
@@ -63,13 +63,17 @@ class Hysteria2(Adapter):
             "tcpForwarding": [],
         }
         for index, port in enumerate(context.link["ports"]):
-            client["tcpForwarding"].append(
+            client.setdefault(
+                "udpForwarding" if port.get("protocol") == "udp" else "tcpForwarding", []
+            ).append(
                 {
                     "listen": f"{context.bind_address}:{context.internal(index)}",
                     "remote": f'{port["host"]}:{port["target"]}',
                 }
             )
-            entry["listeners"].append(context.internal(index))
+            entry["udp_listeners" if port.get("protocol") == "udp" else "listeners"].append(
+                context.internal(index)
+            )
             entry["backends"].append(
                 (port, context.bind_address, context.internal(index), context.link)
             )

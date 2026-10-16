@@ -24,7 +24,7 @@ for method, transports in {
 
 @pytest.mark.parametrize("method,initial,changed", CASES)
 def test_settings_deployment_health_failure_rollback_and_retry(
-    admin, tmp_path, monkeypatch, method, initial, changed
+    admin, tmp_path, monkeypatch, method, initial, changed, changed_protocol=None
 ):
     agents = {}
     fail_health = False
@@ -77,6 +77,9 @@ def test_settings_deployment_health_failure_rollback_and_retry(
     value = admin.get("/api/v1/topology").json()
     applied_revision = value["applied_revision"]
     value["links"][0]["settings"] = changed
+    if changed_protocol:
+        for mapping in value["links"][0]["ports"]:
+            mapping["protocol"] = changed_protocol
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
     fail_health = True
     worker.process(worker.claim())
@@ -101,4 +104,23 @@ def test_settings_deployment_health_failure_rollback_and_retry(
     assert any(
         (agent.current() / "manifest.json").read_bytes() != manifests[key]
         for key, agent in agents.items()
+    )
+
+
+@pytest.mark.parametrize(
+    "method,settings,protocol",
+    [
+        ("gre", {}, "both"),
+        ("backhaul", {"transport": "tcp"}, "both"),
+        ("backhaul", {"transport": "udp"}, "udp"),
+        ("rathole", {"transport": "tls"}, "both"),
+        ("frp_wss", {"transport": "quic"}, "both"),
+        ("hysteria2", {}, "both"),
+    ],
+)
+def test_udp_deployment_failure_restores_tcp_generation_then_retries(
+    admin, tmp_path, monkeypatch, method, settings, protocol
+):
+    test_settings_deployment_health_failure_rollback_and_retry(
+        admin, tmp_path, monkeypatch, method, {}, settings, changed_protocol=protocol
     )

@@ -242,6 +242,12 @@ class Agent:
         interfaces.update(
             self.interface_for_address(address) for address in plan.get("forwarding_addresses", [])
         )
+        for target in plan.get("forwarding_targets", []):
+            routes = json.loads(run(["ip", "-json", "route", "get", target]).stdout)
+            if not routes or not routes[0].get("dev"):
+                raise OperationError("preflight_failed")
+            if routes[0].get("type") != "local":
+                interfaces.add(routes[0]["dev"])
         sysctls = {}
         for interface in interfaces:
             if not re.fullmatch(r"[a-zA-Z0-9_.:-]{1,15}", interface):
@@ -316,25 +322,23 @@ class Agent:
         if not routes or not routes[0].get("prefsrc"):
             return
         address = routes[0]["prefsrc"]
-        # HAProxy uses automatic connect() source-port selection. On Linux,
-        # listeners on other local addresses can also make those port buckets
-        # unavailable, including a full range bound only to the GRE address.
-        # Conservatively require headroom across all planned TCP listeners.
-        occupied = {
-            item["port"] for item in self.planned_sockets(plan) if item["protocol"] == "tcp"
-        }
-        if not occupied:
-            return
+        # Native UDP relays and HAProxy both need automatic outgoing source
+        # ports. Conservatively retain headroom for each listener protocol.
+        reserved = set()
         for value in (
             Path("/proc/sys/net/ipv4/ip_local_reserved_ports").read_text().strip().split(",")
         ):
             if value:
                 parts = [int(p) for p in value.split("-")]
-                occupied.update(range(parts[0], parts[-1] + 1))
-        if all(port in occupied for port in range(first, last + 1)):
-            raise OperationError(
-                "outgoing_port_capacity", {"start": first, "end": last, "address": address}
-            )
+                reserved.update(range(parts[0], parts[-1] + 1))
+        occupied = {"tcp": set(), "udp": set()}
+        for item in self.planned_sockets(plan):
+            occupied[item["protocol"]].add(item["port"])
+        for protocol, ports in occupied.items():
+            if ports and all(port in ports or port in reserved for port in range(first, last + 1)):
+                raise OperationError(
+                    "outgoing_port_capacity", {"start": first, "end": last, "address": address}
+                )
 
     def socket_readiness(self, plan):
         # Readiness is about every declared listener, even when target services
@@ -603,9 +607,13 @@ class Agent:
                 line += f' -i {rule["interface"]}'
             if rule.get("destination"):
                 line += f' -d {rule["destination"]}'
-            if rule["protocol"] in ("tcp", "udp"):
+            if rule["protocol"] in ("tcp", "udp") and "port" in rule:
                 line += f' --dport {rule["port"]}'
-            lines.append(line + " -j ACCEPT")
+            if rule.get("original_destination"):
+                line += f' -m conntrack --ctstate DNAT --ctorigdst {rule["original_destination"]}'
+            if rule.get("nonlocal"):
+                line += " ! -i lo"
+            lines.append(line + " -j " + rule.get("action", "ACCEPT"))
         lines.extend(["COMMIT", ""])
         run(["iptables-restore", "-w", "--noflush"], input="\n".join(lines).encode())
         if run(["iptables", "-w", "-C", "INPUT", "-j", self.chain], check=False).returncode:
@@ -634,6 +642,7 @@ class Agent:
             "network_interfaces",
             "network_rules",
             "forwarding_addresses",
+            "forwarding_targets",
             "loopback_interfaces",
         )
         network_changed = any(previous.get(key) != desired.get(key) for key in network_keys)
@@ -657,6 +666,23 @@ class Agent:
             # Requires= stops the router when an overlay it binds is restarted.
             # Explicitly include it even if its config text is unchanged.
             changed.update(unit for unit in units if unit.endswith("-router.service"))
+        # systemd propagates explicit stop through Requires=. Include consumers
+        # transitively, including native services bound to an owned dummy address.
+        while True:
+            consumers = {
+                unit
+                for unit in units - changed
+                if any(
+                    dependency in changed
+                    for plan in (previous, desired)
+                    for line in plan["units"].get(unit, "").splitlines()
+                    if line.startswith("Requires=")
+                    for dependency in line.removeprefix("Requires=").split()
+                )
+            }
+            if not consumers:
+                break
+            changed.update(consumers)
         # Keep unrelated running units and their network state intact. Comparing
         # referenced files also catches TLS identity changes behind a config.
         for unit in sorted(
@@ -700,7 +726,7 @@ class Agent:
         ordered = sorted(
             changed & desired["units"].keys(),
             key=lambda name: (
-                not name.endswith("-gre.service"),
+                not name.endswith(("-gre.service", "-address.service")),
                 name.endswith("-router.service"),
                 name,
             ),

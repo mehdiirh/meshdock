@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 from .changes import affected_links
 from .db import audit, uid
 from .methods import REGISTRY
-from .ports import contains, overlaps
+from .ports import contains, overlaps, protocols
 from .security import AppError, seal, unseal
 from .tls import create_identity
 
@@ -113,11 +113,15 @@ def validate(db, body):
         graph.setdefault(a.id, set()).add(b.id)
         native = adapter.compact_mapping(link.model_dump())
         for mapping in mappings:
-            if contains(mapping, a.ssh_port):
+            if "tcp" in protocols(mapping) and contains(mapping, a.ssh_port):
                 raise AppError("ssh_port_conflict")
             for other, policy, compact in ports.get(a.id, []):
                 if overlaps(mapping, other):
-                    if compact or native:
+                    if (
+                        compact
+                        or native
+                        or "udp" in set(protocols(mapping)) & set(protocols(other))
+                    ):
                         raise AppError("range_pool_conflict")
                     if policy != link.policy:
                         raise AppError("pool_policy")
@@ -128,20 +132,22 @@ def validate(db, body):
         if not link.enabled or link.control_port is None:
             continue
         adapter = REGISTRY[link.method]
-        protocols = adapter.control_protocols(link.model_dump())
-        if not protocols:
+        control_protocols = adapter.control_protocols(link.model_dump())
+        if not control_protocols:
             raise AppError("invalid_topology")
         server_id = (
             link.entry_id if adapter.metadata["direction"] == "exit-to-entry" else link.exit_id
         )
         port = link.control_port
-        for protocol in protocols:
+        for protocol in control_protocols:
             if protocol == "tcp" and port == servers[server_id].ssh_port:
                 raise AppError("ssh_port_conflict")
             listener = (server_id, protocol, port)
             if listener in control_ports or (
-                protocol == "tcp"
-                and any(contains(mapping, port) for mapping, _, _ in ports.get(server_id, []))
+                any(
+                    protocol in protocols(mapping) and contains(mapping, port)
+                    for mapping, _, _ in ports.get(server_id, [])
+                )
             ):
                 raise AppError("control_port_conflict")
             control_ports.add(listener)

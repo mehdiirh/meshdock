@@ -38,7 +38,7 @@ class Rathole(Adapter):
         "name": "Rathole",
         "encrypted": True,
         "direction": "exit-to-entry",
-        "protocols": ["tcp"],
+        "protocols": ["tcp", "udp"],
         "requirements": ["outbound-tcp"],
     }
 
@@ -91,12 +91,14 @@ type = "{native_transport}"
         for index, port in enumerate(context.link["ports"]):
             name = f's{context.link["slot"]}_{index}'
             token = json.dumps(context.secrets["token"])
-            server += f'[server.services.{name}]\ntoken = {token}\nbind_addr = "{context.bind_address}:{context.internal(index)}"\n'
-            client += f'[client.services.{name}]\ntoken = {token}\nlocal_addr = "{port["host"]}:{port["target"]}"\n'
+            server += f'[server.services.{name}]\ntype = {json.dumps(port.get("protocol", "tcp"))}\ntoken = {token}\nbind_addr = "{context.bind_address}:{context.internal(index)}"\n'
+            client += f'[client.services.{name}]\ntype = {json.dumps(port.get("protocol", "tcp"))}\ntoken = {token}\nlocal_addr = "{port["host"]}:{port["target"]}"\n'
             entry["backends"].append(
                 (port, context.bind_address, context.internal(index), context.link)
             )
-            entry["listeners"].append(context.internal(index))
+            entry["udp_listeners" if port.get("protocol") == "udp" else "listeners"].append(
+                context.internal(index)
+            )
         entry["files"][context.filename + ".toml"] = server
         exit["files"][context.filename + ".toml"] = client
         for plan in (entry, exit):

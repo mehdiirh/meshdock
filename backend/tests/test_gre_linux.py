@@ -128,7 +128,7 @@ def activate(net, mapping, generation, settings=None, legacy=False):
                     "entry_id": net.entry,
                     "exit_id": net.exit,
                     "encrypted": "test",
-                    "ports": [mapping],
+                    "ports": mapping if isinstance(mapping, list) else [mapping],
                     "settings": settings or {},
                     "policy": "failover",
                     "weight": 1,
@@ -159,8 +159,9 @@ def activate(net, mapping, generation, settings=None, legacy=False):
         inside(ns, "sh", str(script), "up")
         pointer.symlink_to(directory)
         helper(net, ns, "p=a.manifest(a.current()); a.firewall(p['firewall'])")
-        if legacy:
+        if plan["network_interfaces"]:
             helper(net, ns, "a.network_up()")
+        if "haproxy.cfg" not in plan["files"]:
             continue
         config = directory / "haproxy.cfg"
         # Namespaces share /run; give test processes distinct stats sockets.
@@ -313,3 +314,129 @@ def test_gre_relay_coexists_with_wildcard_destination_and_rolls_back(network):
         listeners = inside(net.exit, "ss", "-H", "-ltn").stdout
         assert "0.0.0.0:18000" in listeners
         assert ("10.253.0.6:30000" in listeners) == (not legacy)
+
+
+def udp_echo(net, ns, port, address="127.0.0.1"):
+    code = f"""import socket
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(({address!r}, {port}))
+while True:
+ data, peer=s.recvfrom(65535)
+ s.sendto(data, peer)
+"""
+    process = subprocess.Popen(["ip", "netns", "exec", ns, sys.executable, "-c", code])
+    net.processes.append(process)
+    for _ in range(30):
+        if f":{port} " in inside(ns, "ss", "-H", "-lun").stdout:
+            return
+        time.sleep(0.05)
+    raise AssertionError("UDP echo did not start")
+
+
+def udp_request(net, port, succeeds=True):
+    code = f"""import socket
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(.5)
+s.sendto(b'udp-wire-test', ('192.0.2.1', {port}))
+assert s.recv(128) == b'udp-wire-test'
+"""
+    result = inside(net.client, sys.executable, "-c", code, check=False)
+    assert (result.returncode == 0) == succeeds, result.stderr
+
+
+def test_mixed_protocol_ranges_switch_rollback_and_cleanup(network):
+    net = network
+    for port in (19000, 19002, 21000):
+        echo(net, net.exit, port)
+        udp_echo(net, net.exit, port)
+    mapping = {
+        "public": "18000-18002",
+        "target": "19000-19002",
+        "host": "127.0.0.1",
+        "exclude": [18001],
+        "protocol": "both",
+    }
+    before = inside(net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/forwarding").stdout
+    for generation, rows in (
+        ("a", [mapping]),
+        (
+            "b",
+            [
+                {**mapping, "protocol": "tcp"},
+                {"public": 20000, "target": 21000, "host": "127.0.0.1", "protocol": "udp"},
+            ],
+        ),
+        ("c", [mapping]),
+    ):
+        activate(net, rows, generation * 32)
+        for port in (18000, 18002):
+            request(net, port)
+            udp_request(net, port, generation != "b")
+        udp_request(net, 20000, generation == "b")
+        request(net, 18001, False)
+        udp_request(net, 18001, False)
+        rules = inside(net.entry, "iptables-save").stdout
+        assert not any("-p tcp" in line and "DNAT" in line for line in rules.splitlines())
+        assert (
+            inside(
+                net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/route_localnet"
+            ).stdout.strip()
+            == "0"
+        )
+    for ns in (net.entry, net.exit):
+        stop_proxy(net, ns)
+        helper(net, ns, "a.network_down(); a.firewall([]); a.network_down()")
+        inside(ns, "sh", str(net.root / ns / "current" / "gre.sh"), "down")
+        rules = inside(ns, "iptables-save").stdout
+        assert "MESHDOCK_AAAAAAAAAA" not in rules
+        assert "UNRELATED_TEST" in rules
+    assert inside(net.entry, "cat", "/proc/sys/net/ipv4/conf/public0/forwarding").stdout == before
+    udp_request(net, 18000, False)
+
+
+def test_udp_full_range_is_compact_and_preserves_offsets(network):
+    net = network
+    for port in (1023, 65535, 41000, 41002):
+        udp_echo(net, net.exit, port)
+    broad = {
+        "public": "1023-65535",
+        "target": "1023-65535",
+        "host": "127.0.0.1",
+        "protocol": "udp",
+        "exclude": [20000],
+    }
+    activate(net, broad, "a" * 32)
+    udp_request(net, 1023)
+    udp_request(net, 65535)
+    udp_request(net, 20000, False)
+    for generation, start in (("b", 31000), ("c", 51000)):
+        activate(
+            net,
+            {
+                "public": f"{start}-{start+2}",
+                "target": "41000-41002",
+                "host": "127.0.0.1",
+                "protocol": "udp",
+                "exclude": [start + 1],
+            },
+            generation * 32,
+        )
+        udp_request(net, start)
+        udp_request(net, start + 2)
+        udp_request(net, start + 1, False)
+
+
+def test_gre_udp_remote_destination_enables_and_restores_return_interface(network):
+    net = network
+    udp_echo(net, net.entry, 19000, "192.0.2.5")
+    before = inside(net.exit, "cat", "/proc/sys/net/ipv4/conf/underlay1/forwarding").stdout
+    activate(
+        net, {"public": 18000, "target": 19000, "host": "192.0.2.5", "protocol": "udp"}, "a" * 32
+    )
+    udp_request(net, 18000)
+    assert (
+        inside(net.exit, "cat", "/proc/sys/net/ipv4/conf/underlay1/forwarding").stdout.strip()
+        == "1"
+    )
+    helper(net, net.exit, "a.network_down()")
+    assert inside(net.exit, "cat", "/proc/sys/net/ipv4/conf/underlay1/forwarding").stdout == before

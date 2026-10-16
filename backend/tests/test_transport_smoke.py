@@ -108,7 +108,9 @@ class Echo(socketserver.BaseRequestHandler):
         ),
     ],
 )
-def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, tls_fault=None):
+def test_round_trip_over_actual_transport(
+    tmp_path, method, binaries, settings, tls_fault=None, protocol="tcp"
+):
     if any(not (Path(BINARIES) / name).exists() for name in binaries):
         pytest.skip("Required test binary absent")
     adapter = REGISTRY[method]
@@ -117,13 +119,17 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, 
         pytest.skip("Pinned upstream release lacks this transport on this architecture")
     if adapter.auxiliary_counts({"settings": settings})[1] and not shutil.which("haproxy"):
         pytest.skip("Verified bridges require HAProxy; use the isolated Linux test image")
+    server_type = (
+        socketserver.ThreadingUDPServer if protocol == "udp" else socketserver.ThreadingTCPServer
+    )
+    handler = UDPEcho if protocol == "udp" else Echo
     for _ in range(30):
-        echo = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Echo)
+        echo = server_type(("127.0.0.1", 0), handler)
         first = echo.server_address[1]
         try:
             if first > 65533:
                 raise OSError("Port range exceeds TCP space")
-            second = socketserver.ThreadingTCPServer(("127.0.0.1", first + 2), Echo)
+            second = server_type(("127.0.0.1", first + 2), handler)
             break
         except OSError:
             echo.server_close()
@@ -142,6 +148,7 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, 
             [
                 {
                     "public": "443-445",
+                    "protocol": protocol,
                     "target": f"{first}-{first + 2}",
                     "exclude": [444],
                     "host": "127.0.0.1",
@@ -210,13 +217,22 @@ def test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, 
         while time.monotonic() < deadline:
             try:
                 for index in range(2):
-                    with socket.create_connection(
-                        ("127.0.0.1", context.internal(index)), timeout=1
-                    ) as client:
-                        client.settimeout(2)
-                        client.sendall(b"meshdock-roundtrip")
-                        if client.recv(128) != b"meshdock-roundtrip":
-                            raise OSError("Unexpected payload")
+                    if protocol == "udp":
+                        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+                            client.settimeout(1)
+                            client.sendto(
+                                b"meshdock-roundtrip", ("127.0.0.1", context.internal(index))
+                            )
+                            if client.recv(128) != b"meshdock-roundtrip":
+                                raise OSError("Unexpected datagram")
+                    else:
+                        with socket.create_connection(
+                            ("127.0.0.1", context.internal(index)), timeout=1
+                        ) as client:
+                            client.settimeout(2)
+                            client.sendall(b"meshdock-roundtrip")
+                            if client.recv(128) != b"meshdock-roundtrip":
+                                raise OSError("Unexpected payload")
                 if tls_fault:
                     pytest.fail("Untrusted TLS peer carried application traffic")
                 break
@@ -273,3 +289,29 @@ def test_tls_rejects_untrusted_or_wrong_name(
         # retain the configured tunnel.internal name imported by each adapter.
         monkeypatch.setattr("app.tls.TLS_SERVER_NAME", "wrong.internal")
     test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, tls_fault=fault)
+
+
+class UDPEcho(socketserver.BaseRequestHandler):
+    def handle(self):
+        data, connection = self.request
+        connection.sendto(data, self.client_address)
+
+
+@pytest.mark.skipif(not BINARIES, reason="Opt-in real UDP transport tests")
+@pytest.mark.parametrize(
+    "method,binaries,settings",
+    [
+        *[("backhaul", ("backhaul", "backhaul"), {"transport": t}) for t in ("tcp", "udp")],
+        *[
+            ("rathole", ("rathole", "rathole"), {"transport": t})
+            for t in ("tcp", "noise", "tls", "ws", "wss")
+        ],
+        *[
+            ("frp_wss", ("frps", "frpc"), {"transport": t})
+            for t in ("tcp", "kcp", "quic", "websocket", "wss")
+        ],
+        ("hysteria2", ("hysteria", "hysteria"), {}),
+    ],
+)
+def test_udp_round_trip_over_actual_transport(tmp_path, method, binaries, settings):
+    test_round_trip_over_actual_transport(tmp_path, method, binaries, settings, protocol="udp")

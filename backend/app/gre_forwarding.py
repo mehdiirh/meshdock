@@ -1,6 +1,6 @@
 """Compact HAProxy range forwarding over GRE, with no NAT or forwarding sysctls."""
 
-from .ports import segments
+from .ports import segments, protocols
 from .security import AppError
 
 
@@ -11,7 +11,12 @@ def relay_offset(link, unavailable):
     mapping cannot fit another contiguous span, retain the original ports and
     let actual listener preflight decide whether that binding is safe.
     """
-    intervals = [segment for mapping in link["ports"] for segment in segments(mapping)]
+    intervals = [
+        segment
+        for mapping in link["ports"]
+        if "tcp" in protocols(mapping)
+        for segment in segments(mapping)
+    ]
     if not intervals or not any(
         port in unavailable for first, last, _, _ in intervals for port in range(first, last + 1)
     ):
@@ -36,8 +41,15 @@ def configure_ranges(context, entry, exit, interface, local_ip, peer_ip):
         plan["gre_checks"].append({"interface": interface, "peer": source})
 
     shift = context.link.get("relay_port_offset", 0)
-    intervals = [segment for mapping in context.link["ports"] for segment in segments(mapping)]
+    intervals = [
+        segment
+        for mapping in context.link["ports"]
+        if "tcp" in protocols(mapping)
+        for segment in segments(mapping)
+    ]
     for index, mapping in enumerate(context.link["ports"]):
+        if "tcp" not in protocols(mapping):
+            continue
         for part, (start, end, target, target_end) in enumerate(segments(mapping)):
             # A destination on our own relay would loop instead of reaching an app.
             if mapping["host"] == peer_ip and any(

@@ -110,7 +110,7 @@ def test_migration_preserves_existing_links_and_defaults(admin):
     seeded(admin)
     with connect() as database:
         before = [
-            tuple(row)
+            (row[0], row[1], json.loads(row[2]))
             for row in database.execute("SELECT id,encrypted,ports FROM links ORDER BY id")
         ]
     command.downgrade(configuration(), "8d4af912ab63")
@@ -118,7 +118,7 @@ def test_migration_preserves_existing_links_and_defaults(admin):
     migrate()
     with connect() as database:
         assert before == [
-            tuple(row)
+            (row[0], row[1], json.loads(row[2]))
             for row in database.execute("SELECT id,encrypted,ports FROM links ORDER BY id")
         ]
         assert all(row[0] == "{}" for row in database.execute("SELECT settings FROM links"))

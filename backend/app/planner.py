@@ -9,6 +9,7 @@ from .methods import REGISTRY
 from .methods.base import Context, service
 from .security import AppError, unseal
 from .tls import TLS_SERVER_NAME
+from .udp_forwarding import local_frontends
 
 
 def empty():
@@ -56,6 +57,8 @@ def build(snapshot):
         )
         adapter.configure(context, entry_plan, exit_plan)
         adapter.bindings(context, entry_plan, exit_plan)
+        if not adapter.compact_mapping(link):
+            local_frontends(context, entry_plan, exit_plan)
         entry_plan["method_count"] += 1
         exit_plan["method_count"] += 1
         # Destination checks run on the exit, including loopback services such as an existing proxy.
@@ -64,6 +67,8 @@ def build(snapshot):
             exit_plan["forward_count"] += len(link["ports"])
         if not adapter.compact_mapping(link) and not link.get("range_mapping"):
             for mapping in link["ports"]:
+                if mapping.get("protocol", "tcp") != "tcp":
+                    continue
                 exit_plan["checks"].append({"host": mapping["host"], "port": mapping["target"]})
     for server_id, plan in plans.items():
         public_address = servers[server_id]["address"]
@@ -71,6 +76,8 @@ def build(snapshot):
             plan["public_address"] = public_address
         pool = defaultdict(list)
         for mapping, host, port, link in plan.pop("backends"):
+            if mapping.get("protocol", "tcp") != "tcp":
+                continue
             pool[mapping["public"]].append((host, port, link, mapping.get("health_group", 0)))
         config = f"""global
   maxconn 65536
@@ -138,8 +145,23 @@ defaults
                 extra="ExecReload=/bin/kill -USR2 $MAINPID\nKillMode=mixed",
                 kind="notify",
             )
+        interface_units = sorted(
+            name for name in plan["units"] if name.endswith(("-gre.service", "-address.service"))
+        )
+        if plan["network_interfaces"]:
+            plan["units"][f"meshdock-{namespace}-network.service"] = service(
+                f"/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-up {namespace}",
+                extra=f"RemainAfterExit=yes\nExecStop=/usr/bin/python3 /var/lib/meshdock/{namespace}/agent.py --network-down {namespace}",
+                kind="oneshot",
+            ).replace(
+                "After=network-online.target",
+                "After=network-online.target "
+                + " ".join(interface_units)
+                + "\nRequires="
+                + " ".join(interface_units),
+            )
         router = f"meshdock-{namespace}-router.service"
-        gre_units = sorted(name for name in plan["units"] if name.endswith("-gre.service"))
+        gre_units = interface_units
         if router in plan["units"] and gre_units:
             plan["units"][router] = plan["units"][router].replace(
                 "After=network-online.target",
@@ -150,8 +172,9 @@ defaults
             )
         validate_bindings(plan)
         if plan["firewall"]:
-            from .firewall import script
+            from .firewall import compact, script
 
+            plan["firewall"] = list(compact(plan["firewall"]))
             plan["files"]["firewall.sh"] = script(namespace, plan["firewall"])
             plan["units"][f"meshdock-{namespace}-firewall.service"] = service(
                 f"/bin/sh /var/lib/meshdock/{namespace}/current/firewall.sh",
@@ -197,7 +220,8 @@ def validate_bindings(plan):
                 raise AppError("control_port_conflict")
 
     ordered = sorted(
-        plan["socket_ranges"], key=lambda item: (item["address"], item["protocol"], item["start"])
+        plan["socket_ranges"] + plan["forwarded_ranges"],
+        key=lambda item: (item["address"], item["protocol"], item["start"]),
     )
     for previous, current in pairwise(ordered):
         if (previous["address"], previous["protocol"]) == (

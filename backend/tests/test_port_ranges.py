@@ -74,7 +74,9 @@ def test_all_adapters_compile_ranges_with_exceptions(admin, method):
         snapshot = topology.desired(database, True)
     plans = build(snapshot)
     entry, exit = plans[link["entry_id"]], plans[link["exit_id"]]
-    assert admin.get("/api/v1/topology").json()["links"][0]["ports"] == link["ports"]
+    assert admin.get("/api/v1/topology").json()["links"][0]["ports"] == [
+        {"protocol": "tcp", **p} for p in link["ports"]
+    ]
     if method == "gre":
         assert "bind 192.0.2.10:30000-30003" in entry["files"]["haproxy.cfg"]
         assert "bind 192.0.2.10:30005-30009" in entry["files"]["haproxy.cfg"]
@@ -212,13 +214,14 @@ def test_distinct_public_ranges_can_reach_same_ports_on_different_hosts(admin):
         ("192.0.2.1", "udp", False),
     ],
 )
+@pytest.mark.parametrize("mapping_protocol", ["tcp", "udp"])
 def test_live_conflicts_respect_bind_address_and_protocol(
-    tmp_path, monkeypatch, address, protocol, conflicts
+    tmp_path, monkeypatch, address, protocol, conflicts, mapping_protocol
 ):
     agent = Agent("a" * 10, root=tmp_path)
     plan = empty()
     plan["forwarded_ranges"] = [
-        {"address": "192.0.2.1", "protocol": "tcp", "start": 1023, "end": 65535}
+        {"address": "192.0.2.1", "protocol": mapping_protocol, "start": 1023, "end": 65535}
     ]
 
     def run(args, **kwargs):
@@ -232,6 +235,7 @@ def test_live_conflicts_respect_bind_address_and_protocol(
 
     monkeypatch.setattr(remote_agent, "run", run)
     monkeypatch.setattr(remote_agent.shutil, "which", lambda _: "/usr/bin/ss")
+    conflicts = address in ("192.0.2.1", "0.0.0.0", "[::]") and protocol == mapping_protocol
     if conflicts:
         with pytest.raises(OperationError, match="listener_conflict") as error:
             agent.socket_preflight(plan)
@@ -434,7 +438,10 @@ def test_range_readiness_detects_missing_listener_without_probing_targets(tmp_pa
         agent.socket_readiness(plan)
 
 
-def test_outgoing_ports_use_live_kernel_range_across_listener_addresses(tmp_path, monkeypatch):
+@pytest.mark.parametrize("protocol", ["tcp", "udp"])
+def test_outgoing_ports_use_live_kernel_range_across_listener_addresses(
+    tmp_path, monkeypatch, protocol
+):
     from pathlib import Path
 
     agent = Agent("a" * 10, root=tmp_path)
@@ -456,7 +463,7 @@ def test_outgoing_ports_use_live_kernel_range_across_listener_addresses(tmp_path
     )
     plan = empty()
     plan["sockets"] = [
-        {"address": "192.0.2.10", "protocol": "tcp", "port": p} for p in (40000, 40001)
+        {"address": "192.0.2.10", "protocol": protocol, "port": p} for p in (40000, 40001)
     ]
     with pytest.raises(OperationError, match="outgoing_port_capacity") as error:
         agent.outgoing_port_preflight(plan)
@@ -464,7 +471,7 @@ def test_outgoing_ports_use_live_kernel_range_across_listener_addresses(tmp_path
     plan["sockets"].pop()  # Explicit exception leaves outgoing capacity.
     agent.outgoing_port_preflight(plan)
     plan["sockets"] = [
-        {"address": "192.0.2.11", "protocol": "tcp", "port": p} for p in (40000, 40001)
+        {"address": "192.0.2.11", "protocol": protocol, "port": p} for p in (40000, 40001)
     ]
     with pytest.raises(OperationError, match="outgoing_port_capacity"):
         agent.outgoing_port_preflight(plan)  # Linux automatic connect can exhaust across bind IPs.

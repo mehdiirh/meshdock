@@ -17,6 +17,9 @@ def test_transport_contract_and_plan(admin, method, transport):
     value["links"] = value["links"][:1]
     link = value["links"][0]
     link.update(method=method, settings={"transport": transport})
+    if method == "backhaul" and transport == "udp":
+        for mapping in link["ports"]:
+            mapping["protocol"] = "udp"
     assert admin.put("/api/v1/topology", json=payload(value)).status_code == 200
     with connect() as database:
         snapshot = topology.desired(database, True)
@@ -28,7 +31,7 @@ def test_transport_contract_and_plan(admin, method, transport):
     assert {s["protocol"] for s in entry["sockets"] if s["port"] == control} == set(
         capability["control_protocols"]
     )
-    assert {r["protocol"] for r in entry["firewall"] if r["port"] == control} == set(
+    assert {r["protocol"] for r in entry["firewall"] if r.get("port") == control} == set(
         capability["control_protocols"]
     )
     entry_aux, exit_aux = REGISTRY[method].auxiliary_counts(link)
