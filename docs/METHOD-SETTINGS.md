@@ -62,13 +62,13 @@ Controls were checked against the pinned releases: [Backhaul 0.7.2](https://gith
 
 | Adapter | Selectable transports | Security and platform requirements |
 | --- | --- | --- |
-| Backhaul 0.7.2 | TCP, TCPMUX, WS, WSS, WSMUX, WSSMUX | WSS/WSSMUX use native server TLS and a verifying HAProxy client bridge. Other choices do not encrypt the inter-server connection. |
+| Backhaul 0.7.2 | TCP, UDP, TCPMUX, WS, WSS, WSMUX, WSSMUX | WSS/WSSMUX use native server TLS and a verifying HAProxy client bridge. Other choices do not encrypt the inter-server connection. |
 | Rathole 0.5.0 | TCP, Noise, TLS, WS, WSS | Noise pins its server key. TLS/WSS use owned HAProxy bridges with certificate and hostname verification. The official ARM64 binary lacks WebSocket: WS/WSS require x86_64 and fail preflight on ARM64 before activation. TCP/Noise/TLS work on both architectures. |
 | FRP 0.71.0 | TCP, KCP, QUIC, WebSocket, WSS | All choices use verified TLS. WebSocket carries TLS inside WS; WSS carries WS inside TLS. KCP/QUIC need UDP and also reserve/check FRP's mandatory TCP listener on the same port. |
 | Hysteria 2.13.0 | QUIC over UDP, with optional Salamander | This pinned release has no alternative underlying transport. TLS verification remains mandatory. |
 | GRE / reverse SSH | GRE / SSH over TCP | These adapters have no additional selectable underlying transport. |
 
-These choices carry **TCP application mappings**. Backhaul's separate `udp` mode forwards UDP applications; it cannot carry the TCP mappings represented by MeshDock's current API and is deliberately rejected. Payload UDP mapping is a separate capability, not interchangeable with QUIC/KCP's use of UDP for TCP transport.
+Application protocol is chosen independently per mapping row (`tcp`, `udp`, or `both`). GRE, Rathole, FRP, and Hysteria support TCP and UDP payloads. Backhaul TCP carries both; its native UDP transport carries UDP only and requires TCP control plus UDP on the control port. Backhaul TCPMUX/WS/WSS/WSMUX/WSSMUX and reverse SSH accept TCP payloads only. QUIC/KCP describe the outer transport, not the application protocol. Capability metadata drives UI validation and the API independently enforces it.
 
 MeshDock generates an encrypted-at-rest TLS identity per link, stages its certificate/key only where required, and installs trust material on the verifying endpoint. You do not need a public domain, certificate upload, or ACME setup. Private certificates do not make the tunnel indistinguishable from a public HTTPS website. There is no “skip verification” switch. The managed hostname is `tunnel.internal`; verification does not require DNS resolution of that name.
 
