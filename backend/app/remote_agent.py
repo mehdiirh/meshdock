@@ -181,6 +181,7 @@ class Agent:
         return {
             "pre": ("nat", "PREROUTING", self.chain + "_PRE"),
             "post": ("nat", "POSTROUTING", self.chain + "_POST"),
+            "input": ("nat", "INPUT", self.chain + "_IN"),
             "forward": ("filter", "FORWARD", self.chain + "_FWD"),
             "mss": ("mangle", "FORWARD", self.chain + "_MSS"),
         }
@@ -211,6 +212,30 @@ class Agent:
                 ).returncode:
                     raise OperationError("ownership_conflict")
 
+    def clear_udp_connections(self, peers):
+        # Only original tuples on this installation's private GRE endpoints.
+        # Never flush the table or match public traffic/another protocol.
+        for peer in peers:
+            result = run(
+                [
+                    "conntrack",
+                    "-D",
+                    "-p",
+                    "udp",
+                    "--orig-src",
+                    peer["source"],
+                    "--orig-dst",
+                    peer["destination"],
+                ],
+                check=False,
+            )
+            if result.returncode and not (
+                result.returncode == 1 and b"0 flow entries have been deleted" in result.stderr
+            ):
+                raise OperationError(
+                    "remote_failed", {"command": "conntrack", "exit_code": result.returncode}
+                )
+
     def network_down(self):
         marker = self.root / "network-state.json"
         if not marker.exists():
@@ -232,6 +257,7 @@ class Agent:
                 # Restore only the value we set, and only during the same boot.
                 if path.exists() and path.read_text().strip() == "1":
                     path.write_text(previous)
+        self.clear_udp_connections(state.get("udp_conntrack_peers", []))
         marker.unlink()
 
     def network_up(self):
@@ -262,13 +288,14 @@ class Agent:
             {
                 "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
                 "sysctls": sysctls,
+                "udp_conntrack_peers": plan.get("udp_conntrack_peers", []),
             },
         )
         try:
             for name in sysctls:
                 Path(name).write_text("1")
             for key, (table, parent, chain) in self.network_chains().items():
-                rules = plan["network_rules"][key]
+                rules = plan["network_rules"].get(key, [])
                 if not rules:
                     continue
                 lines = ["*" + table, ":" + chain + " - [0:0]"]
@@ -276,6 +303,7 @@ class Agent:
                 lines.extend(["COMMIT", ""])
                 run(["iptables-restore", "-w", "--noflush"], input="\n".join(lines).encode())
                 run(["iptables", "-w", "-t", table, "-I", parent, "1", "-j", chain])
+            self.clear_udp_connections(plan.get("udp_conntrack_peers", []))
         except Exception:
             self.network_down()
             raise
@@ -437,6 +465,8 @@ class Agent:
         if not plan["units"]:
             return
         packages = ["iproute2", "iptables", "ca-certificates"]
+        if plan.get("udp_conntrack_peers"):
+            packages.append("conntrack")
         if "haproxy.cfg" in plan["files"]:
             packages.append("haproxy")
         if any(name.endswith("-sshd.conf") for name in plan["files"]):
@@ -644,6 +674,7 @@ class Agent:
             "forwarding_addresses",
             "forwarding_targets",
             "loopback_interfaces",
+            "udp_conntrack_peers",
         )
         network_changed = any(previous.get(key) != desired.get(key) for key in network_keys)
         units = previous["units"].keys() | desired["units"].keys()

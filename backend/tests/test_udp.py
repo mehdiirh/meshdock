@@ -154,3 +154,58 @@ def test_backhaul_both_reuses_native_listener_pair(admin):
     plan = plans[link["entry_id"]]
     assert "accept_udp = true" in plan["files"][f'link-{link["slot"]}.toml']
     assert len([s for s in plan["sockets"] if s["address"] == link["internal_address"]]) == 4
+
+
+def test_loopback_udp_nat_is_scoped_and_upgrade_selects_existing_endpoints(admin):
+    import copy
+    from app.worker import targets
+
+    snapshot, plans = save(admin, protocol="both")
+    link = snapshot["links"][0]
+    entry, exit = plans[link["entry_id"]], plans[link["exit_id"]]
+    assert "input" not in entry["network_rules"]
+    rules = exit["network_rules"]["input"]
+    assert len(rules) == 2  # The excluded port is not covered.
+    for rule in rules:
+        assert "-p udp" in rule and "-i md" in rule
+        assert "-d 127.0.0.1" in rule
+        assert "--ctstate DNAT --ctorigdst 10.253." in rule
+        assert "-j SNAT --to-source 127.0.0.1" in rule
+    assert all("-p tcp" not in r for r in rules)
+    previous = copy.deepcopy(snapshot)
+    previous["method_versions"]["gre"] = 4
+    assert snapshot["method_versions"]["gre"] == 5
+    assert {target.server["id"] for target in targets(previous, snapshot)} == {
+        link["entry_id"],
+        link["exit_id"],
+    }
+    assert targets(snapshot, snapshot) == []
+
+
+def test_conntrack_cleanup_is_scoped_and_failure_is_not_silenced(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app.remote_agent import Agent, OperationError
+
+    agent = Agent("a" * 10, root=tmp_path)
+    commands = []
+    response = SimpleNamespace(returncode=1, stderr=b"conntrack: 0 flow entries have been deleted.")
+    monkeypatch.setattr(
+        "app.remote_agent.run", lambda args, **kwargs: commands.append(args) or response
+    )
+    peers = [{"source": "10.253.0.5", "destination": "10.253.0.6"}]
+    agent.clear_udp_connections(peers)
+    assert commands == [
+        ["conntrack", "-D", "-p", "udp", "--orig-src", "10.253.0.5", "--orig-dst", "10.253.0.6"]
+    ]
+    response.stderr = b"Operation not permitted"
+    with pytest.raises(OperationError, match="remote_failed"):
+        agent.clear_udp_connections(peers)
+
+
+def test_conntrack_installation_progress_remains_visible():
+    from app.ssh import progress_event
+
+    event = progress_event(
+        json.dumps({"event": "packages_installing", "detail": {"packages": ["conntrack"]}})
+    )
+    assert event[1]["packages"] == ["conntrack"]

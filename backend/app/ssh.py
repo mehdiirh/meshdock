@@ -157,6 +157,7 @@ def progress_event(line):
         "openssh-server",
         "openssh-client",
         "iputils-ping",
+        "conntrack",
     }
     if (
         isinstance(packages, list)

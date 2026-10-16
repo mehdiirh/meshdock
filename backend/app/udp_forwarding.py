@@ -118,6 +118,9 @@ def gre_ranges(context, entry, exit, interface, local_ip, peer_ip):
     entry["forwarding_addresses"].append(context.entry["address"])
     if any(IPv4Address(m["host"]).is_loopback for m in mappings):
         exit["loopback_interfaces"].append(interface)
+        exit.setdefault("udp_conntrack_peers", []).append(
+            {"source": local_ip, "destination": peer_ip}
+        )
     for mapping in mappings:
         for first, last, target, end in segments(mapping):
             public, destination = span(first, last), span(target, end)
@@ -151,7 +154,17 @@ def gre_ranges(context, entry, exit, interface, local_ip, peer_ip):
                     "port": destination,
                 }
             )
-            if not IPv4Address(mapping["host"]).is_loopback:
+            if IPv4Address(mapping["host"]).is_loopback:
+                # A wildcard UDP socket chooses its reply source from the route
+                # to its peer. Present a local peer so replies originate from
+                # loopback and match the destination side of the DNAT session.
+                # Conntrack reverses both translations on the return path.
+                exit["network_rules"].setdefault("input", []).append(
+                    f'-i {interface} -s {local_ip} -d {mapping["host"]} -p udp --dport {destination}'
+                    f" -m conntrack --ctstate DNAT --ctorigdst {peer_ip}"
+                    f' -j SNAT --to-source {mapping["host"]}'
+                )
+            else:
                 exit.setdefault("forwarding_targets", []).append(mapping["host"])
                 exit["network_rules"]["forward"].append(
                     f'-i {interface} -s {local_ip} -d {mapping["host"]} -p udp --dport {destination} -j ACCEPT'

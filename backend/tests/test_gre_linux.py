@@ -333,12 +333,15 @@ while True:
     raise AssertionError("UDP echo did not start")
 
 
-def udp_request(net, port, succeeds=True):
+def udp_request(net, port, succeeds=True, source_port=0):
     code = f"""import socket
 s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.settimeout(.5)
+s.bind(('0.0.0.0', {source_port}))
 s.sendto(b'udp-wire-test', ('192.0.2.1', {port}))
-assert s.recv(128) == b'udp-wire-test'
+data, peer=s.recvfrom(128)
+assert data == b'udp-wire-test'
+assert peer == ('192.0.2.1', {port}), peer
 """
     result = inside(net.client, sys.executable, "-c", code, check=False)
     assert (result.returncode == 0) == succeeds, result.stderr
@@ -440,3 +443,108 @@ def test_gre_udp_remote_destination_enables_and_restores_return_interface(networ
     )
     helper(net, net.exit, "a.network_down()")
     assert inside(net.exit, "cat", "/proc/sys/net/ipv4/conf/underlay1/forwarding").stdout == before
+
+
+@pytest.mark.parametrize("bind", ["0.0.0.0", "127.0.0.1"])
+@pytest.mark.parametrize("public", [18000, 19000, 21000])
+def test_tcp_udp_wildcard_replies_keep_public_port_across_switch_and_rollback(
+    network, bind, public
+):
+    net = network
+    for port in (19000, 19002):
+        echo(net, net.exit, port, bind)
+        udp_echo(net, net.exit, port, bind)
+    mapping = {
+        "public": f"{public}-{public+2}",
+        "target": "19000-19002",
+        "host": "127.0.0.1",
+        "protocol": "both",
+        "exclude": [public + 1],
+    }
+    for generation, protocol in (("a", "both"), ("b", "tcp"), ("c", "both")):
+        activate(net, {**mapping, "protocol": protocol}, generation * 32)
+        for port in (public, public + 2):
+            request(net, port)
+            udp_request(net, port, protocol == "both")
+        request(net, public + 1, False)
+        udp_request(net, public + 1, False)
+    for ns in (net.entry, net.exit):
+        stop_proxy(net, ns)
+        helper(net, ns, "a.network_down(); a.firewall([]); a.network_down()")
+        inside(ns, "sh", str(net.root / ns / "current" / "gre.sh"), "down")
+        rules = inside(ns, "iptables-save").stdout
+        assert "MESHDOCK_AAAAAAAAAA" not in rules
+        assert "UNRELATED_TEST" in rules
+
+
+def test_failed_udp_input_nat_activation_cleans_up_and_restores_traffic(network):
+    net = network
+    udp_echo(net, net.exit, 19000, "0.0.0.0")
+    activate(
+        net, {"public": 18000, "target": 19000, "host": "127.0.0.1", "protocol": "udp"}, "a" * 32
+    )
+    udp_request(net, 18000)
+    result = helper(
+        net,
+        net.exit,
+        """
+import app.remote_agent as module
+original = module.run
+def fail_after_install(args, **kwargs):
+    result = original(args, **kwargs)
+    if args[:5] == ['iptables', '-w', '-t', 'nat', '-I'] and args[5] == 'INPUT':
+        raise RuntimeError('Injected failure after INPUT NAT installation')
+    return result
+module.run = fail_after_install
+try:
+    a.network_up()
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('Injected activation failure did not run')
+assert not (a.root / 'network-state.json').exists()
+module.run = original
+rules = original(['iptables-save']).stdout.decode()
+assert 'MESHDOCK_AAAAAAAAAA_IN' not in rules
+assert 'MESHDOCK_AAAAAAAAAA_PRE' not in rules
+assert 'UNRELATED_TEST' in rules
+a.network_up()
+""",
+    )
+    udp_request(net, 18000)
+
+
+def test_upgrade_clears_only_owned_stale_udp_sessions(network):
+    net = network
+    udp_echo(net, net.exit, 19000, "0.0.0.0")
+    activate(
+        net, {"public": 19000, "target": 19000, "host": "127.0.0.1", "protocol": "udp"}, "a" * 32
+    )
+    manifest = net.root / net.exit / "current" / "manifest.json"
+    fixed = json.loads(manifest.read_text())
+    # Reproduce a deployed version-4 generation without INPUT SNAT.
+    helper(net, net.exit, "a.network_down()")
+    old = json.loads(json.dumps(fixed))
+    old["network_rules"].pop("input")
+    old.pop("udp_conntrack_peers")
+    manifest.write_text(json.dumps(old))
+    helper(net, net.exit, "a.network_up()")
+    udp_request(net, 19000, False, source_port=45000)
+    # An unrelated local UDP session must survive the targeted invalidation.
+    udp_echo(net, net.exit, 19800)
+    inside(
+        net.exit,
+        sys.executable,
+        "-c",
+        "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'unrelated',('127.0.0.1',19800)); s.recv(128)",
+    )
+    before = inside(net.exit, "conntrack", "-L", "-p", "udp").stdout
+    assert "dport=19800" in before
+    assert "dst=10.253.0.6" in before
+    helper(net, net.exit, "a.network_down()")
+    manifest.write_text(json.dumps(fixed))
+    helper(net, net.exit, "a.network_up()")
+    # Same client tuple: do not hide stale NAT by choosing a new source port.
+    udp_request(net, 19000, source_port=45000)
+    after = inside(net.exit, "conntrack", "-L", "-p", "udp").stdout
+    assert "dport=19800" in after

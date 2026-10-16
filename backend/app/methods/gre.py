@@ -14,7 +14,7 @@ class GREOptions(Options):
 
 
 class GRE(Adapter):
-    plan_version = 4
+    plan_version = 5
     options_model = GREOptions
     control_protocol = None
     native_ranges = True
