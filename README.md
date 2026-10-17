@@ -17,7 +17,7 @@ Draw connections, choose a transport, and follow deployments from one visual das
 
 MeshDock brings your server inventory, tunnel configuration, SSH credentials, and deployment history into one place. Use it to connect multiple entry servers to multiple destination servers, change transports, and manage port mappings without maintaining each configuration by hand.
 
-> **Project status:** MeshDock is under active development. It has automated application and isolated network tests, but has not been deployed in production or validated against live filtering conditions. Try the demo first, then test on disposable servers before relying on it.
+> **Project status:** MeshDock is under active development. Automated application and isolated network tests cover core behavior; they do not guarantee reliability or performance on every network. Try the demo first, then test on disposable servers before relying on it.
 
 ## What you can do
 
@@ -30,42 +30,29 @@ MeshDock brings your server inventory, tunnel configuration, SSH credentials, an
 - **Automate through the API.** Administrators sign in with a username and password; integrations use scoped Bearer API keys.
 - **Work in your language and theme.** English and Persian, full RTL layout, and light and dark appearances are included.
 
-## What MeshDock installs and manages
+## Quick start
 
-**MeshDock installs and configures the tunnel infrastructure, including its own server-side firewall and forwarding rules.** You do not need to install or configure Backhaul, Rathole, FRP, Hysteria, or GRE tunnels before adding your servers. You can start with fresh supported servers that already have working root SSH access.
+Choose how you want to run MeshDock:
 
-In **real mode**, saving a connection queues a deployment. MeshDock connects over SSH, prepares the required software and configuration, starts its managed services, and checks the result. In **demo mode**, these actions are simulated.
+| Goal | Start here | Can change managed servers? |
+| --- | --- | --- |
+| Explore the dashboard | [Docker demo](#try-the-demo-with-docker) | No; deployments are simulated. |
+| Work on the code | [Local development](#run-locally-for-development) | No by default; only with `--prod`. |
+| Host a real controller with automatic HTTPS | [Production with Caddy](#deploy-with-https) | Yes. |
+| Host behind your existing Nginx or other proxy | [Existing reverse proxy](#use-an-existing-reverse-proxy) | Yes. |
 
-| Component | MeshDock's responsibility |
-| --- | --- |
-| **Tunnel software** | Downloads and verifies required Backhaul, Rathole, FRP, or Hysteria binaries for the selected method. Installs supporting packages, including OpenSSH tools for reverse SSH. |
-| **GRE** | Uses Linux's GRE support to create and configure tunnel interfaces, addresses, MTU, and the forwarding setup. GRE is a kernel feature, rather than a separate downloaded tunnel program. |
-| **Dependencies and helper** | Installs required system packages and a small remote helper. Configures its own HAProxy services where the selected mapping needs proxy listeners or traffic distribution. |
-| **Server-side networking** | Adds and manages its own firewall chains and rules inside the servers. Allows the selected transport and managed listeners. TCP port forwarding uses HAProxy, including GRE ranges. UDP uses native tunnel listeners or GRE kernel forwarding with scoped DNAT/SNAT rules. |
-| **Service lifecycle** | Creates and starts managed systemd services, applies connection and method changes, records deployment events, checks activation, and attempts rollback if deployment fails. |
-| **Cleanup** | Removes its managed tunnel services, interfaces, and firewall rules when requested. Shared packages and recovery files are retained; see [full removal](docs/OPERATIONS.md#cleanup-and-full-removal). |
+Clone the repository and enter its directory before following a path below:
 
-### What you prepare yourself
-
-- **Servers and access:** provide supported Debian/Ubuntu servers with systemd, root SSH credentials, and management connectivity from the controller. Verify their SSH fingerprints. The servers also need access to package repositories and the selected software's download sources during installation.
-- **The destination application:** install and configure the application that receives the forwarded traffic, such as **Xray managed by 3x-ui**, a web server, or another TCP service. Tell MeshDock its destination host and port. MeshDock handles the tunnel; your application handles its users, authentication, and application-level routing.
-- **Network controls outside the servers:** allow the chosen transport and required application traffic through your provider's firewall/security groups. Arrange any required NAT or port forwarding on an upstream router. MeshDock currently has no integration for changing those external controls.
-
-**Server firewall rules and provider firewall rules are different layers.** MeshDock changes its own rules inside the managed Linux servers. A hosting provider's security group can still block packets before they reach those rules.
-
-For example, if Xray already listens on port `8443` on your Turkey server, you can map port `443` on your Iran server to it:
-
-```text
-VPN client → Iran:443 → MeshDock-managed tunnel → Turkey's Xray service:8443
+```sh
+git clone https://github.com/mehdiirh/meshdock.git
+cd meshdock
 ```
 
-MeshDock sets up and operates the tunnel and forwarding between those servers. You maintain Xray/3x-ui and its client accounts. Existing Xray routing, unrelated Nginx sites, management SSH daemon settings, and default routes stay under your control while MeshDock adds the resources it owns.
-
-## Quick start
+The controller runs the dashboard and deployment worker. Install it once; add your tunnel servers through the UI afterward. You do not need to install MeshDock on every managed server.
 
 ### Try the demo with Docker
 
-You need **Docker with Compose v2** and **Python 3** for setup and startup validation. Download or clone this repository, open a terminal in its root directory, then run:
+You need **Docker with Compose v2** and **Python 3** for setup and startup validation. From a fresh checkout, run:
 
 ```sh
 python3 scripts/setup.py --demo
@@ -101,7 +88,7 @@ Replace the example host and username, then open [localhost:8080](http://localho
 
 ### Run locally for development
 
-You need **Python 3.12+, uv, Node.js 22+, and npm**.
+You need **Python 3.12–3.14, uv, Node.js 22+, and npm**.
 
 ```sh
 ./scripts/dev.sh
@@ -116,6 +103,137 @@ The launcher **always defaults to demo mode**, even if `.env` or your shell sets
 ```
 
 `--prod` enables real deployments while running the local development servers. Use Docker for hosting the service. Stop the current launcher before changing modes. Demo and real mode keep separate databases and encryption keys in `.data/demo` and `.data/prod`; the launcher sets these locations itself.
+
+### Deploy with HTTPS
+
+Use this path for a real controller with Docker and automatic HTTPS through the included Caddy proxy.
+
+- **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443**, both available for Caddy to bind. If another service already uses them, follow [existing reverse proxy](#use-an-existing-reverse-proxy) instead.
+- **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller (directly or through an SSH jump host), and public IPv4 transport addresses.
+- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall access rules and HAProxy forwarding inside the servers. Management SSH must be reachable directly from the controller or through a configured SSH jump host, even if it is blocked between tunnel peers.
+- **Destination application:** Have Xray/3x-ui, your web server, or another TCP application running at the destination host and port. You do not need to preinstall the tunnel software; MeshDock installs and configures that during deployment.
+
+On a **fresh checkout with no `.env`**, replace the example domain and run:
+
+```sh
+python3 scripts/setup.py --origin https://meshdock.example.com
+python3 scripts/start.py --profile tls
+```
+
+Open your domain and sign in using the generated credentials in `.env`. Omitting `--demo` enables real deployments. Caddy obtains the TLS certificate; API and worker are not published directly. The web service also listens on controller loopback at port 8080 for use behind your own reverse proxy.
+
+Keep **one API and one worker per SQLite database**, on a local Docker volume rather than NFS. Start with disposable servers and follow the [staging checklist](docs/OPERATIONS.md#first-staging-deployment).
+
+### Use an existing reverse proxy
+
+If Nginx, Caddy, Apache, or another reverse proxy already serves ports **80/443**, keep it as the HTTPS entry point. Start MeshDock **without `--profile tls`** so its bundled Caddy does not compete for those ports.
+
+On a fresh checkout with no `.env`, set the exact HTTPS origin your users will visit:
+
+```sh
+python3 scripts/setup.py --origin https://meshdock.example.com
+python3 scripts/start.py
+```
+
+This starts the production API, worker, and web UI with real deployments enabled. MeshDock's web endpoint binds only to `127.0.0.1:8080` on the controller. Your reverse proxy must forward **all paths**, including `/api/`, to that endpoint.
+
+For **Nginx installed directly on the controller host**, use a site such as the following. Replace the domain and certificate paths with your own; obtain a valid certificate using your existing certificate manager before enabling the site.
+
+```nginx
+server {
+    listen 80;
+    server_name meshdock.example.com;
+    return 301 https://meshdock.example.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name meshdock.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/meshdock.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/meshdock.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+Validate the site with `sudo nginx -t`, then reload Nginx with `sudo systemctl reload nginx`. Open your HTTPS domain and sign in with the credentials generated in `.env`. Keep `MESHDOCK_PUBLIC_ORIGIN=https://meshdock.example.com` and `MESHDOCK_COOKIE_SECURE=true`; the setup command above sets both.
+
+Deployment logs stream over server-sent events. Disable proxy buffering/caching and allow long-running responses at every proxy layer so progress appears promptly.
+
+**If your reverse proxy is itself a container**, its `127.0.0.1` points to that container, not the controller host. Attach it to MeshDock's Compose network (by default `meshdock_default`) and proxy to `http://web:8080`, or configure an explicit reachable upstream using your existing Docker networking. Only the reverse proxy should publish public HTTP/HTTPS ports; keep the API and worker private.
+
+**If local port 8080 is already occupied**, set `MESHDOCK_PORT=8087` (or another free port) in `.env` before starting. For a host-installed proxy, update its upstream to `127.0.0.1:8087`. The container's internal web port remains `8080`, so Caddy and proxies on the Compose network still use `web:8080`. Your public HTTPS origin stays the same.
+
+### Configuration
+
+Use the generator for a unique password. [sample.env](sample.env) documents manual configuration; `.env.example` contains the same template. Replace its placeholder password if configuring manually.
+
+| Variable | Purpose |
+| --- | --- |
+| `MESHDOCK_ADMIN_USERNAME` | Initial administrator username; defaults to `admin`. |
+| `MESHDOCK_ADMIN_PASSWORD` | Initial administrator password, at least 12 characters. |
+| `MESHDOCK_PUBLIC_ORIGIN` | The full browser-facing origin, such as `https://meshdock.example.com`. |
+| `MESHDOCK_DOMAIN` | Domain used by Caddy. |
+| `MESHDOCK_COOKIE_SECURE` | Set to `true` for HTTPS deployments. |
+| `MESHDOCK_DEMO` | `true` simulates deployments; `false` permits server changes. |
+| `MESHDOCK_PORT` | Local web port in Docker; defaults to `8080`. |
+
+The admin variables initialize a new database only. Change an existing password in **Access & activity**; editing `.env` does not reset it. Keep `.env`, private keys, database files, backups, and real infrastructure details out of Git.
+
+### Validate before starting Docker
+
+Use `python3 scripts/start.py` to build and start the stack. It first asks Compose to resolve the configuration, then checks that the API's administrator password contains at least 12 characters. A missing or short password produces a clear error before any image is built or container is started. Passwords and rendered configuration are never printed.
+
+```sh
+python3 scripts/start.py --check          # Validate only; do not start containers
+python3 scripts/start.py                 # Validate, build, and start in the background
+python3 scripts/start.py --no-build      # Validate and start existing images
+```
+
+The launcher supports `-p` / `--project-name`, repeatable `--env-file`, and repeatable `--profile` options, including `--profile tls`. It preserves your configured demo/real mode. Compose resolves environment-file quoting and interpolation; an exported shell variable takes precedence over `.env`. If a short shell password overrides a valid file value, update it or run `unset MESHDOCK_ADMIN_PASSWORD` before retrying.
+
+The password check runs on every launch, including existing installations, but never changes an existing account's password. Direct `docker compose up` bypasses this preflight: Compose itself cannot enforce a minimum password length, so the API retains its own first-start validation as a fallback. Existing containers are not stopped by a failed preflight.
+
+## What MeshDock installs and manages
+
+**MeshDock installs and configures the tunnel infrastructure, including its own server-side firewall and forwarding rules.** You do not need to install or configure Backhaul, Rathole, FRP, Hysteria, or GRE tunnels before adding your servers. You can start with fresh supported servers that already have working root SSH access.
+
+In **real mode**, saving a connection queues a deployment. MeshDock connects over SSH, prepares the required software and configuration, starts its managed services, and checks the result. In **demo mode**, these actions are simulated.
+
+| Component | MeshDock's responsibility |
+| --- | --- |
+| **Tunnel software** | Downloads and verifies required Backhaul, Rathole, FRP, or Hysteria binaries for the selected method. Installs supporting packages, including OpenSSH tools for reverse SSH. |
+| **GRE** | Uses Linux's GRE support to create and configure tunnel interfaces, addresses, MTU, and the forwarding setup. GRE is a kernel feature, rather than a separate downloaded tunnel program. |
+| **Dependencies and helper** | Installs required system packages and a small remote helper. Configures its own HAProxy services where the selected mapping needs proxy listeners or traffic distribution. |
+| **Server-side networking** | Adds and manages its own firewall chains and rules inside the servers. Allows the selected transport and managed listeners. TCP port forwarding uses HAProxy, including GRE ranges. UDP uses native tunnel listeners or GRE kernel forwarding with scoped DNAT/SNAT rules. |
+| **Service lifecycle** | Creates and starts managed systemd services, applies connection and method changes, records deployment events, checks activation, and attempts rollback if deployment fails. |
+| **Cleanup** | Removes its managed tunnel services, interfaces, and firewall rules when requested. Shared packages and recovery files are retained; see [full removal](docs/OPERATIONS.md#cleanup-and-full-removal). |
+
+### What you prepare yourself
+
+- **Servers and access:** provide supported Debian/Ubuntu servers with systemd, root SSH credentials, and management connectivity from the controller. Verify their SSH fingerprints. The servers also need access to package repositories and the selected software's download sources during installation.
+- **The destination application:** install and configure the application that receives the forwarded traffic, such as **Xray managed by 3x-ui**, a web server, or another TCP service. Tell MeshDock its destination host and port. MeshDock handles the tunnel; your application handles its users, authentication, and application-level routing.
+- **Network controls outside the servers:** allow the chosen transport and required application traffic through your provider's firewall/security groups. Arrange any required NAT or port forwarding on an upstream router. MeshDock currently has no integration for changing those external controls.
+
+**Server firewall rules and provider firewall rules are different layers.** MeshDock changes its own rules inside the managed Linux servers. A hosting provider's security group can still block packets before they reach those rules.
+
+For example, if Xray already listens on port `8443` on your Turkey server, you can map port `443` on your Iran server to it:
+
+```text
+VPN client → Iran:443 → MeshDock-managed tunnel → Turkey's Xray service:8443
+```
+
+MeshDock sets up and operates the tunnel and forwarding between those servers. You maintain Xray/3x-ui and its client accounts. Existing Xray routing, unrelated Nginx sites, management SSH daemon settings, and default routes stay under your control while MeshDock adds the resources it owns.
 
 ## Screenshots
 
@@ -185,63 +303,13 @@ All current adapters forward **TCP application traffic**. The transport itself m
 | Method | Transport | Encryption | Main requirement |
 | --- | --- | --- | --- |
 | **GRE** | IP protocol 47 | No | GRE must be permitted between public IPv4 endpoints; uses HAProxy for TCP forwarding, including compact port ranges. |
-| **Backhaul** | TCP / TCPMUX / WS / WSS / WSMUX / WSSMUX | WSS modes | Exit initiates TCP connections to entry. MeshDock verifies TLS for WSS/WSSMUX. |
+| **Backhaul** | TCP / UDP / TCPMUX / WS / WSS / WSMUX / WSSMUX | WSS modes | Exit initiates TCP connections to entry. MeshDock verifies TLS for WSS/WSSMUX. |
 | **Rathole** | TCP / Noise / TLS / WS / WSS | Noise and TLS modes | WS/WSS require x86_64 with the pinned release; other choices also work on ARM64. |
 | **Reverse SSH** | SSH over TCP | Yes | Exit can reach the managed SSH listener on entry. |
 | **FRP** | TCP / KCP / QUIC / WebSocket / WSS | Yes | All choices verify managed TLS. KCP/QUIC require UDP and a TCP listener. |
 | **Hysteria 2** | QUIC over UDP, with Salamander | Yes | Entry can reach exit over UDP. |
 
 Use [transport research and limitations](docs/TRANSPORTS.md) for more detail. No method guarantees connectivity through every provider firewall or filtering system.
-
-## Deploy with HTTPS
-
-### Before you start
-
-- **Controller:** Docker with Compose v2, Python 3 for setup, a domain pointing to this machine, and inbound ports **80 and 443** for Caddy.
-- **Managed servers:** Debian or Ubuntu with **systemd**, root SSH access from the controller (directly or through an SSH jump host), and public IPv4 transport addresses.
-- **Network:** Allow the selected transport and required application traffic in provider firewalls/security groups, and arrange any upstream-router NAT. MeshDock configures its own firewall access rules and HAProxy forwarding inside the servers. Management SSH must be reachable directly from the controller or through a configured SSH jump host, even if it is blocked between tunnel peers.
-- **Destination application:** Have Xray/3x-ui, your web server, or another TCP application running at the destination host and port. You do not need to preinstall the tunnel software; MeshDock installs and configures that during deployment.
-
-On a **fresh checkout with no `.env`**, replace the example domain and run:
-
-```sh
-python3 scripts/setup.py --origin https://meshdock.example.com
-python3 scripts/start.py --profile tls
-```
-
-Open your domain and sign in using the generated credentials in `.env`. Omitting `--demo` enables real deployments. Caddy obtains the TLS certificate; API and worker are not published directly. The web service also listens on controller loopback at port 8080 for use behind your own reverse proxy.
-
-Keep **one API and one worker per SQLite database**, on a local Docker volume rather than NFS. Start with disposable servers and follow the [staging checklist](docs/OPERATIONS.md#first-staging-deployment).
-
-### Configuration
-
-Use the generator for a unique password. [sample.env](sample.env) documents manual configuration; `.env.example` contains the same template. Replace its placeholder password if configuring manually.
-
-| Variable | Purpose |
-| --- | --- |
-| `MESHDOCK_ADMIN_USERNAME` | Initial administrator username; defaults to `admin`. |
-| `MESHDOCK_ADMIN_PASSWORD` | Initial administrator password, at least 12 characters. |
-| `MESHDOCK_PUBLIC_ORIGIN` | The full browser-facing origin, such as `https://meshdock.example.com`. |
-| `MESHDOCK_DOMAIN` | Domain used by Caddy. |
-| `MESHDOCK_COOKIE_SECURE` | Set to `true` for HTTPS deployments. |
-| `MESHDOCK_DEMO` | `true` simulates deployments; `false` permits server changes. |
-| `MESHDOCK_PORT` | Local web port in Docker; defaults to `8080`. |
-
-The admin variables initialize a new database only. Change an existing password in **Access & activity**; editing `.env` does not reset it. Keep `.env`, private keys, database files, backups, and real infrastructure details out of Git.
-
-### Validate before starting Docker
-
-Use `python3 scripts/start.py` to build and start the stack. It first asks Compose to resolve the configuration, then checks that the API's administrator password contains at least 12 characters. A missing or short password produces a clear error before any image is built or container is started. Passwords and rendered configuration are never printed.
-
-```sh
-python3 scripts/start.py --check          # Validate only; do not start containers
-python3 scripts/start.py                 # Validate, build, and start in the background
-python3 scripts/start.py --no-build      # Validate and start existing images
-```
-
-The launcher supports `-p` / `--project-name`, repeatable `--env-file`, and repeatable `--profile` options, including `--profile tls`. It preserves your configured demo/real mode. Compose resolves environment-file quoting and interpolation; an exported shell variable takes precedence over `.env`. If a short shell password overrides a valid file value, update it or run `unset MESHDOCK_ADMIN_PASSWORD` before retrying.
-
-The password check runs on every launch, including existing installations, but never changes an existing account's password. Direct `docker compose up` bypasses this preflight: Compose itself cannot enforce a minimum password length, so the API retains its own first-start validation as a fallback. Existing containers are not stopped by a failed preflight.
 
 ## Operations and recovery
 
@@ -278,6 +346,18 @@ No. MeshDock manages server-to-server tunnels. Keep your destination application
 Linux targets with Debian/Ubuntu and systemd, IPv4 endpoints, and per-range TCP, UDP, or TCP + UDP mappings. UDP is supported by GRE, Rathole, FRP, Hysteria 2, and Backhaul TCP/UDP transports. Reverse SSH and Backhaul WebSocket/mux transports accept TCP only. IPv6 tunnel addressing is not implemented.
 
 </details>
+
+### Deployment progress, failures and cancellation
+
+Open the deployment drawer to see persisted events as they arrive: server preflight, required packages, downloads/checksums, configuration validation, activation, health checks and rollback. Errors identify the server and failed step, with actionable explanations instead of exposing raw output that may contain secrets. The collapsed footer always shows the **latest revision**, even after you inspect an older job.
+
+Failed or retrying changed connections remain visible in red for inspection and editing. Unchanged connections retain their applied status. MeshDock compares each server's desired plan with its applied plan: adding a new exit does not redeploy an unchanged exit, and unchanged services on a shared entry remain running. Shared router/firewall changes may still affect connections using those resources.
+
+**Failed removals stay visible.** A deleted or disabled connection remains on the canvas until removal succeeds. After a completed rollback, it is red and marked **Removal failed — still deployed** (or **Removal cancelled — still deployed**). Click it or the unfinished-removal banner to **Retry removal** or **Restore connection**. Missing endpoint nodes also remain visible. If rollback is incomplete, MeshDock shows an uncertain state and requires recovery first. These labels describe the last applied configuration, not a live connectivity check. Actions reconcile the current requested configuration, including any other pending changes.
+
+Use **Cancel & roll back** to stop queued work or request cancellation of running work. An in-flight server command is allowed to finish or time out before rollback begins; cancellation is not a process kill. The UI shows **Cancelling safely** until the worker finishes. If a host becomes unreachable, recovery remains required and newer deployments stay blocked. Cancelling leaves the desired topology available to edit or remove; it does not erase your connections or remove shared packages.
+
+API administrators can request cancellation with `POST /api/v1/jobs/{id}/cancel`. The request is durable and idempotent. Schema migration `92bfc04e31ad` adds the cancellation flag; normal startup applies migrations. Back up your database and encryption key before upgrades.
 
 ## API access
 
@@ -333,15 +413,3 @@ Linux packet tests are opt-in and run in a disposable container with no external
 ## License
 
 MeshDock is available under the [MIT License](LICENSE).
-
-### Deployment progress, failures and cancellation
-
-Open the deployment drawer to see persisted events as they arrive: server preflight, required packages, downloads/checksums, configuration validation, activation, health checks and rollback. Errors identify the server and failed step, with actionable explanations instead of exposing raw output that may contain secrets. The collapsed footer always shows the **latest revision**, even after you inspect an older job.
-
-Failed or retrying changed connections remain visible in red for inspection and editing. Unchanged connections retain their applied status. MeshDock compares each server's desired plan with its applied plan: adding a new exit does not redeploy an unchanged exit, and unchanged services on a shared entry remain running. Shared router/firewall changes may still affect connections using those resources.
-
-**Failed removals stay visible.** A deleted or disabled connection remains on the canvas until removal succeeds. After a completed rollback, it is red and marked **Removal failed — still deployed** (or **Removal cancelled — still deployed**). Click it or the unfinished-removal banner to **Retry removal** or **Restore connection**. Missing endpoint nodes also remain visible. If rollback is incomplete, MeshDock shows an uncertain state and requires recovery first. These labels describe the last applied configuration, not a live connectivity check. Actions reconcile the current requested configuration, including any other pending changes.
-
-Use **Cancel & roll back** to stop queued work or request cancellation of running work. An in-flight server command is allowed to finish or time out before rollback begins; cancellation is not a process kill. The UI shows **Cancelling safely** until the worker finishes. If a host becomes unreachable, recovery remains required and newer deployments stay blocked. Cancelling leaves the desired topology available to edit or remove; it does not erase your connections or remove shared packages.
-
-API administrators can request cancellation with `POST /api/v1/jobs/{id}/cancel`. The request is durable and idempotent. Schema migration `92bfc04e31ad` adds the cancellation flag; normal startup applies migrations. Back up your database and encryption key before upgrades.
