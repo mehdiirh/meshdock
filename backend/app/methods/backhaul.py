@@ -56,7 +56,9 @@ class Backhaul(Adapter):
         required_by_protocol = {
             p: self.allocation_protocols(context.link, {"protocol": p}) for p in ("tcp", "udp")
         }
-        for mapping, port in zip(context.link["ports"], context.link["internal_ports"]):
+        for mapping, port in zip(
+            context.link["ports"], context.link["internal_ports"], strict=False
+        ):
             for protocol in required_by_protocol[mapping.get("protocol", "tcp")]:
                 identity = (context.bind_address, port, protocol)
                 if identity not in present:

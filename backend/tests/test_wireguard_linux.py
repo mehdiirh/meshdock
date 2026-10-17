@@ -13,16 +13,19 @@ import time
 from pathlib import Path
 
 import pytest
+import test_gre_linux
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from test_gre_linux import (
     activate,
     echo,
     inside,
-    network,
-    pytestmark,
     request,
     udp_echo,
 )
+
+# Register the shared fixture and preserve its container-only opt-in guard.
+network = test_gre_linux.network
+pytestmark = test_gre_linux.pytestmark
 
 
 def keys():

@@ -1,6 +1,6 @@
 """Compact HAProxy range forwarding over GRE, with no NAT or forwarding sysctls."""
 
-from .ports import segments, protocols
+from .ports import protocols, segments
 from .security import AppError
 
 

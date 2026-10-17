@@ -4,7 +4,8 @@ from collections import defaultdict
 from itertools import chain
 
 from .methods import REGISTRY
-from .ports import bounds, contains, expand, segments, protocols as payload_protocols
+from .ports import bounds, contains, expand, segments
+from .ports import protocols as payload_protocols
 from .security import AppError
 
 
@@ -160,7 +161,7 @@ def allocate(snapshot):
                 assigned[(identity, protocol)] = port
                 used[protocol].add(port)
         auxiliary = []
-        for index in range(entry_aux):
+        for _ in range(entry_aux):
             port = next(candidates["tcp"], None)
             if port is None:
                 raise AppError("port_capacity")

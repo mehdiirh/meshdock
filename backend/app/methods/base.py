@@ -160,7 +160,9 @@ class Adapter:
 
     def bindings(self, context, entry, exit):
         seen = set()
-        for mapping, port in zip(context.link["ports"], context.link.get("internal_ports", [])):
+        for mapping, port in zip(
+            context.link["ports"], context.link.get("internal_ports", []), strict=False
+        ):
             protocol = mapping.get("protocol", "tcp")
             if (port, protocol) not in seen:
                 entry["sockets"].append(

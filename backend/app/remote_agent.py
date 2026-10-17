@@ -362,7 +362,7 @@ class Agent:
         occupied = {"tcp": set(), "udp": set()}
         for item in self.planned_sockets(plan):
             occupied[item["protocol"]].add(item["port"])
-        for protocol, ports in occupied.items():
+        for ports in occupied.values():
             if ports and all(port in ports or port in reserved for port in range(first, last + 1)):
                 raise OperationError(
                     "outgoing_port_capacity", {"start": first, "end": last, "address": address}

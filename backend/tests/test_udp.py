@@ -158,6 +158,7 @@ def test_backhaul_both_reuses_native_listener_pair(admin):
 
 def test_loopback_udp_nat_is_scoped_and_upgrade_selects_existing_endpoints(admin):
     import copy
+
     from app.worker import targets
 
     snapshot, plans = save(admin, protocol="both")
@@ -184,6 +185,7 @@ def test_loopback_udp_nat_is_scoped_and_upgrade_selects_existing_endpoints(admin
 
 def test_conntrack_cleanup_is_scoped_and_failure_is_not_silenced(tmp_path, monkeypatch):
     from types import SimpleNamespace
+
     from app.remote_agent import Agent, OperationError
 
     agent = Agent("a" * 10, root=tmp_path)
@@ -214,6 +216,7 @@ def test_conntrack_installation_progress_remains_visible():
 @pytest.mark.parametrize("endpoint", ["entry", "exit", "legacy_exit"])
 def test_health_checks_only_declared_network_chains(admin, tmp_path, monkeypatch, endpoint):
     from types import SimpleNamespace
+
     from app.remote_agent import Agent, OperationError
 
     snapshot, plans = save(admin, protocol="both")

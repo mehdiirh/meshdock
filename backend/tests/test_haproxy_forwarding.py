@@ -6,9 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from test_port_ranges import single_link
-from test_topology import payload
-
 from app import remote_agent, topology
 from app.changes import affected_links
 from app.db import connect
@@ -16,6 +13,8 @@ from app.planner import build, empty, validate_bindings
 from app.remote_agent import Agent, OperationError, atomic_json
 from app.security import AppError
 from app.worker import targets
+from test_port_ranges import single_link
+from test_topology import payload
 
 
 def range_snapshot(admin):

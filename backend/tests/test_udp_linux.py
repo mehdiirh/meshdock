@@ -7,18 +7,21 @@ import time
 from pathlib import Path
 
 import pytest
+import test_gre_linux
 from app import planner
 from app.topology import material
 from test_gre_linux import (
     echo,
     helper,
     inside,
-    network,
-    pytestmark,
     request,
     udp_echo,
     udp_request,
 )
+
+# Register the shared fixture and preserve its container-only opt-in guard.
+network = test_gre_linux.network
+pytestmark = test_gre_linux.pytestmark
 
 
 def test_native_udp_public_forwarding_and_previous_generation_restore(network, monkeypatch):

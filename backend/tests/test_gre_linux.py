@@ -13,7 +13,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 from app import planner
 
 pytestmark = pytest.mark.skipif(
@@ -495,7 +494,7 @@ def test_failed_udp_input_nat_activation_cleans_up_and_restores_traffic(network)
         net, {"public": 18000, "target": 19000, "host": "127.0.0.1", "protocol": "udp"}, "a" * 32
     )
     udp_request(net, 18000)
-    result = helper(
+    helper(
         net,
         net.exit,
         """
