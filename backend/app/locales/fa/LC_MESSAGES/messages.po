@@ -308,3 +308,48 @@ msgstr "این سرور اتصال تونل یا پرش SSH دارد. پیش ا�
 
 msgid "mapping_protocol_unsupported"
 msgstr "روش یا انتقال انتخاب‌شده از پروتکل این نگاشت پشتیبانی نمی‌کند. انتقال سازگار انتخاب کنید یا پروتکل نگاشت را تغییر دهید."
+
+msgid "health_gre_peer_message"
+msgstr "همتای GRE با نشانی {peer} از طریق رابط {interface} پاسخ نداد."
+
+msgid "health_gre_peer_hint"
+msgstr "دو سر تونل، عبور GRE (پروتکل IP شمارهٔ ۴۷، نه پورت ۴۷) و ICMP داخل تونل را بررسی کنید. ناموفق بودن پینگ به‌تنهایی محل مسدود شدن ترافیک را مشخص نمی‌کند."
+
+msgid "health_service_message"
+msgstr "سرویس مدیریت‌شدهٔ {unit} فعال نیست."
+
+msgid "health_service_hint"
+msgstr "وضعیت و گزارش systemd همین سرویس را روی سرور مشخص‌شده برای یافتن علت شروع ناموفق بررسی کنید. خروجی خام سرویس ممکن است حاوی اطلاعات محرمانه باشد و نمایش داده نمی‌شود."
+
+msgid "health_firewall_message"
+msgstr "پرش فایروال مدیریت‌شده به {chain} در {table}/{parent} وجود ندارد."
+
+msgid "health_firewall_hint"
+msgstr "بررسی کنید آیا ابزار دیگری قوانین فایروال MeshDock را حذف کرده است. قوانین نامرتبط فایروال را پاک نکنید."
+
+msgid "health_listener_message"
+msgstr "{missing} شنوندهٔ موردنیاز {protocol} وجود ندارد؛ نخستین نشانی: {address}:{port}."
+
+msgid "health_listener_hint"
+msgstr "سرویس پراکسی یا تونل مدیریت‌شده، نشانی‌های اتصال و ظرفیت شنونده‌ها را بررسی کنید. این آزمون مربوط به شنونده‌های تونل است، نه فعال بودن همهٔ برنامه‌های مقصد."
+
+msgid "health_listener_scan_message"
+msgstr "فهرست شنونده‌های {protocol} سرور قابل تفسیر نیست."
+
+msgid "health_listener_scan_hint"
+msgstr "نسخهٔ iproute2/ss و قالب خروجی آن را روی سرور بررسی کنید. وضعیت شنونده‌ها قابل تأیید نبود."
+
+msgid "health_connection_message"
+msgstr "اتصال TCP برای بررسی آمادگی به {address}:{port} ناموفق بود."
+
+msgid "health_connection_hint"
+msgstr "بررسی کنید این نشانی در حال پذیرش اتصال است و از سرور مشخص‌شده در دسترس است. این آزمون اتصال TCP است، نه ورود به برنامه یا آزمون ترافیک سرتاسری."
+
+msgid "health_retry"
+msgstr "بررسی سلامت ناموفق بود؛ پیش از بازگردانی دوباره تلاش می‌شود."
+
+msgid "health_retry_message"
+msgstr "بررسی سلامت {attempt}/{limit} ناموفق بود؛ تلاش مجدد. {message}"
+
+msgid "health_unknown_hint"
+msgstr "در این گزارش مشخص نشده کدام آزمون سلامت ناموفق بوده است. علت را نمی‌توان تنها از این پیام تعیین کرد."

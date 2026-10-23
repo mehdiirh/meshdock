@@ -4,7 +4,6 @@ import base64
 import hashlib
 import io
 import json
-import re
 import socket
 import time
 from contextlib import suppress
@@ -12,6 +11,7 @@ from pathlib import Path
 
 import paramiko
 
+from .diagnostics import health_details
 from .security import AppError
 
 
@@ -267,6 +267,8 @@ class Remote:
         result = json.loads(raw)
         if not result.get("ok"):
             details = result.get("detail", {})
+            if not isinstance(details, dict):
+                details = {}
             safe = {}
             if result.get("code") == "listener_conflict":
                 from ipaddress import ip_address
@@ -307,21 +309,7 @@ class Remote:
                 }
                 safe["server_id"] = self.server["id"]
             if result.get("code") == "health_failed":
-                if details.get("check") == "service" and re.fullmatch(
-                    r"meshdock-[a-z0-9-]+\.service", str(details.get("unit", ""))
-                ):
-                    safe = {"check": "service", "unit": details["unit"]}
-                elif (
-                    details.get("check") == "connection"
-                    and re.fullmatch(r"[A-Za-z0-9.-]{1,253}", str(details.get("address", "")))
-                    and type(details.get("port")) is int
-                    and 1 <= details["port"] <= 65535
-                ):
-                    safe = {
-                        "check": "connection",
-                        "address": details["address"],
-                        "port": details["port"],
-                    }
+                safe = health_details(details)
             if details.get("command") in {
                 "apt-get",
                 "env",

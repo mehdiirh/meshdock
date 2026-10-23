@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from .. import force_removals
 from ..changes import affected_links
 from ..db import audit, connect
+from ..diagnostics import report
 from ..i18n import translate
 from ..security import AppError, principal, require
 
@@ -51,6 +52,11 @@ def jobs(request: Request, actor=Depends(require("read"))):
                 (job["id"],),
             ).fetchone()
             job["failure"] = dict(failure) if failure else None
+            job["error_hint"] = None
+            if failure and failure["code"] == job["error_code"]:
+                diagnosis = report(failure["code"], failure["detail"], language(request))
+                job["error_message"] = diagnosis["message"]
+                job["error_hint"] = diagnosis["hint"]
             result.append(job)
         return result
 
@@ -111,7 +117,7 @@ def logs(
             )
         ]
     for r in rows:
-        r["message"] = translate(r["code"], lang or language(request))
+        r.update(report(r["code"], r["detail"], lang or language(request)))
     return rows
 
 
@@ -142,7 +148,7 @@ async def events(
                 row = db.execute("SELECT status FROM jobs WHERE id=?", (id,)).fetchone()
             for r in rows:
                 cursor = r["id"]
-                r["message"] = translate(r["code"], lang or language(request))
+                r.update(report(r["code"], r["detail"], lang or language(request)))
                 yield "id: " + str(cursor) + "\ndata: " + json.dumps(r) + "\n\n"
             # Drain every persisted page before closing a completed job's stream.
             if len(rows) == 200:

@@ -320,3 +320,48 @@ msgstr "This server has a tunnel or SSH jump connection. Remove those connection
 
 msgid "mapping_protocol_unsupported"
 msgstr "The selected method or transport does not support this mapping protocol. Choose a compatible transport or change the mapping protocol."
+
+msgid "health_gre_peer_message"
+msgstr "GRE peer {peer} did not answer through interface {interface}."
+
+msgid "health_gre_peer_hint"
+msgstr "Check both tunnel endpoints, GRE (IP protocol 47, not port 47), and ICMP inside the tunnel. A failed ping alone does not prove where traffic is blocked."
+
+msgid "health_service_message"
+msgstr "Managed service {unit} is not active."
+
+msgid "health_service_hint"
+msgstr "Inspect this service’s status and system journal on the named server for its startup failure. Raw service output is not included because it may contain secrets."
+
+msgid "health_firewall_message"
+msgstr "Managed firewall jump to {chain} is missing from {table}/{parent}."
+
+msgid "health_firewall_hint"
+msgstr "Check whether another firewall manager removed MeshDock’s rules. Do not flush unrelated firewall rules."
+
+msgid "health_listener_message"
+msgstr "{missing} required {protocol} listener(s) are missing; first missing endpoint: {address}:{port}."
+
+msgid "health_listener_hint"
+msgstr "Check the managed proxy/tunnel service, bind addresses, and listener capacity. This checks tunnel listeners, not whether every destination application is running."
+
+msgid "health_listener_scan_message"
+msgstr "Could not interpret the server’s {protocol} listener list."
+
+msgid "health_listener_scan_hint"
+msgstr "Inspect the server’s iproute2/ss version and output format. The listener state could not be verified."
+
+msgid "health_connection_message"
+msgstr "TCP readiness connection to {address}:{port} failed."
+
+msgid "health_connection_hint"
+msgstr "Check that this endpoint is listening and reachable from the named server. This is a TCP connection test, not an application login or end-to-end traffic test."
+
+msgid "health_retry"
+msgstr "Health check failed; retrying before rollback."
+
+msgid "health_retry_message"
+msgstr "Health probe {attempt}/{limit} failed; retrying. {message}"
+
+msgid "health_unknown_hint"
+msgstr "This report did not record the individual health check. Its cause cannot be determined from this message alone."

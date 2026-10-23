@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from . import settings
 from .artifacts import ARTIFACTS
 from .db import audit, connect, initialize, log, uid
+from .diagnostics import health_details
 from .planner import build, empty
 from .security import AppError
 from .ssh import Remote
@@ -344,6 +345,17 @@ class Worker:
                     except AppError as error:
                         if error.code != "health_failed" or attempt == 11:
                             raise
+                        detail = health_details(error.details)
+                        detail.update(
+                            phase="checking", health_attempt=attempt + 1, health_attempts=12
+                        )
+                        log(
+                            job["id"],
+                            "health_retry",
+                            detail=json.dumps(detail),
+                            server=failure_server,
+                            level="warning",
+                        )
                         time.sleep(3)
             # Commit markers retain the previous generation, so a later host's failure remains reversible.
             for item in receipt["hosts"]:

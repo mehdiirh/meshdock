@@ -386,11 +386,29 @@ class Agent:
             for line in run(["ss", "-H", flag]).stdout.decode().splitlines():
                 fields = line.split()
                 if len(fields) < 4:
-                    raise OperationError("health_failed")
-                host, port = fields[3].rsplit(":", 1)
-                actual.add((host.strip("[]"), int(port)))
-            if not required.issubset(actual):
-                raise OperationError("health_failed")
+                    raise OperationError(
+                        "health_failed", {"check": "listener_scan", "protocol": protocol}
+                    )
+                try:
+                    host, port = fields[3].rsplit(":", 1)
+                    actual.add((host.strip("[]"), int(port)))
+                except ValueError:
+                    raise OperationError(
+                        "health_failed", {"check": "listener_scan", "protocol": protocol}
+                    ) from None
+            missing = required - actual
+            if missing:
+                address, port = min(missing)
+                raise OperationError(
+                    "health_failed",
+                    {
+                        "check": "listener",
+                        "protocol": protocol,
+                        "address": address,
+                        "port": port,
+                        "missing": len(missing),
+                    },
+                )
 
     def socket_preflight(self, plan):
         if not shutil.which("ss"):
@@ -792,12 +810,18 @@ class Agent:
                         ["iptables", "-w", "-t", table, "-C", parent, "-j", chain], check=False
                     ).returncode
                 ):
-                    raise OperationError("health_failed")
+                    raise OperationError(
+                        "health_failed",
+                        {"check": "firewall", "table": table, "parent": parent, "chain": chain},
+                    )
         for check in plan.get("gre_checks", []):
             if run(
                 ["ping", "-I", check["interface"], "-c", "1", "-W", "3", check["peer"]], check=False
             ).returncode:
-                raise OperationError("health_failed")
+                raise OperationError(
+                    "health_failed",
+                    {"check": "gre_peer", "interface": check["interface"], "peer": check["peer"]},
+                )
         self.socket_readiness(plan)
         for endpoint in plan["checks"]:
             try:
