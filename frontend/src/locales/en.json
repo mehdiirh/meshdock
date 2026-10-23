@@ -296,7 +296,8 @@
       "applying": "Activating configuration",
       "checking": "Checking health",
       "committing": "Confirming deployment"
-    }
+    },
+    "technicalDetails": "Technical details"
   },
   "removal": {
     "title": "Unfinished removal",

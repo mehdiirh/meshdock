@@ -2318,3 +2318,21 @@ fieldset.field legend {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.log-hint {
+  display: block;
+  margin-block-start: 0.35rem;
+  color: var(--muted);
+}
+.log-details {
+  margin-block-start: 0.35rem;
+  overflow-wrap: anywhere;
+}
+.log-details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.log-details[open] small {
+  display: block;
+  margin-block-start: 0.35rem;
+}

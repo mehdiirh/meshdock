@@ -155,6 +155,7 @@ export interface Job {
   created: number;
   error_code: string | null;
   error_message?: string | null;
+  error_hint?: string | null;
   cancel_requested?: number;
   link_ids?: string[];
   failure?: { server_id: string | null; code: string; detail: string } | null;
@@ -164,6 +165,7 @@ export interface Log {
   level: string;
   code: string;
   message: string;
+  hint?: string | null;
   detail: string;
   server_id: string | null;
   created: number;

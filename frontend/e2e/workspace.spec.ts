@@ -1139,3 +1139,87 @@ test("saves three independent protocol sections and blocks incompatible Backhaul
       .links[0].ports.map((p: { protocol?: string }) => p.protocol || "tcp"),
   ).toEqual(["tcp", "udp", "both"]);
 });
+
+for (const lang of ["en", "fa"] as const) {
+  test(`health failure explains the peer and keeps technical details expandable (${lang})`, async ({
+    page,
+  }) => {
+    const message =
+      lang === "en"
+        ? "GRE peer 10.253.0.13 did not answer through interface mdaaaaaa3."
+        : "همتای GRE با نشانی 10.253.0.13 از طریق رابط mdaaaaaa3 پاسخ نداد.";
+    const hint =
+      lang === "en"
+        ? "Check GRE (IP protocol 47, not port 47)."
+        : "عبور GRE (پروتکل IP شمارهٔ ۴۷، نه پورت ۴۷) را بررسی کنید.";
+    const detail = JSON.stringify({
+      check: "gre_peer",
+      interface: "mdaaaaaa3",
+      peer: "10.253.0.13",
+      phase: "checking",
+    });
+    await page.route("**/api/v1/jobs", (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: "health-failure",
+            revision: 2,
+            kind: "deploy",
+            status: "failed",
+            attempt: 3,
+            created: 2,
+            error_code: "health_failed",
+            error_message: message,
+            error_hint: hint,
+            failure: { server_id: b, code: "health_failed", detail },
+            link_ids: [edge],
+          },
+        ],
+      }),
+    );
+    await page.route("**/api/v1/jobs/health-failure/logs?*", (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: 1,
+            level: "error",
+            code: "health_failed",
+            message,
+            hint,
+            detail,
+            server_id: b,
+            created: 2,
+          },
+        ],
+      }),
+    );
+    await page.route("**/api/v1/jobs/health-failure/events?*", (route) =>
+      route.fulfill({
+        contentType: "text/event-stream",
+        body: "event: done\ndata: {}\n\n",
+      }),
+    );
+    await page.reload();
+    if (lang === "fa")
+      await page
+        .getByRole("button", { name: "Change language", exact: true })
+        .click();
+    await page.locator(".jobs-bar").click();
+    await expect(page.locator(".deployment-error")).toContainText(message);
+    await expect(page.locator(".deployment-error")).toContainText(hint);
+    await expect(page.locator(".deployment-error")).toContainText(
+      "Exit fixture",
+    );
+    await expect(page.locator(".log-hint")).toContainText(hint);
+    const details = page.locator(".log-details");
+    await expect(details.locator("small")).not.toBeVisible();
+    await details
+      .getByText(lang === "en" ? "Technical details" : "جزئیات فنی", {
+        exact: true,
+      })
+      .click();
+    await expect(details.locator("small")).toBeVisible();
+    await expect(details.locator("small")).toHaveAttribute("dir", "ltr");
+    await expect(details.locator("small")).toContainText('"check":"gre_peer"');
+  });
+}

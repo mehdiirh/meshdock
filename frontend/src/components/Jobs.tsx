@@ -258,6 +258,7 @@ export function Jobs({ servers }: { servers: Server[] }) {
             {active?.error_message && (
               <div className="deployment-error" role="alert">
                 <strong>{active.error_message}</strong>
+                {active.error_hint && <span>{active.error_hint}</span>}
                 {failurePhase(active.failure?.detail) && (
                   <span>
                     {t("deployment.phase")}:{" "}
@@ -294,8 +295,14 @@ export function Jobs({ servers }: { servers: Server[] }) {
                   </span>
                   <span>
                     {log.message}
+                    {log.hint && <small className="log-hint">{log.hint}</small>}
                     {log.detail && (
-                      <small className="mono"> {log.detail}</small>
+                      <details className="log-details">
+                        <summary>{t("deployment.technicalDetails")}</summary>
+                        <small className="mono" dir="ltr">
+                          {log.detail}
+                        </small>
+                      </details>
                     )}
                   </span>
                 </div>

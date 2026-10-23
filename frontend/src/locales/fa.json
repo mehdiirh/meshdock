@@ -296,7 +296,8 @@
       "applying": "فعال‌سازی تنظیمات",
       "checking": "بررسی سلامت",
       "committing": "تأیید استقرار"
-    }
+    },
+    "technicalDetails": "جزئیات فنی"
   },
   "removal": {
     "title": "حذف ناتمام",
